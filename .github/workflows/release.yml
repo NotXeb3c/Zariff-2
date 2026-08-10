@@ -1,0 +1,263 @@
+name: "Release Heliox OS"
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to validate (for example v0.10.1)"
+        type: string
+        required: true
+      build_installers:
+        description: "Build installers and update the draft prerelease"
+        type: boolean
+        default: false
+      publish_pypi:
+        description: "Publish the already-validated daemon distribution to PyPI"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  release-gate:
+    name: Verify release metadata, CI, and daemon package
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      commit_sha: ${{ steps.version.outputs.commit_sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.release_tag }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify synchronized version and tag
+        id: version
+        shell: bash
+        env:
+          DISPATCH_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          tag=""
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${DISPATCH_RELEASE_TAG}"
+          fi
+          python scripts/check_release.py --tag "$tag"
+          version="$(python -c "import tomllib; print(tomllib.load(open('daemon/pyproject.toml', 'rb'))['project']['version'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Require successful main CI for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          required_checks=(
+            "Svelte (Prettier + Build)"
+            "Visual Regression (ubuntu-latest)"
+            "Visual Regression (windows-latest)"
+            "Visual Regression (macos-latest)"
+            "Rust (Clippy + Fmt)"
+            "Python (Ruff + Pytest) (ubuntu-latest, 3.11)"
+            "Python (Ruff + Pytest) (ubuntu-latest, 3.12)"
+            "Python (Ruff + Pytest) (windows-latest, 3.11)"
+            "Python (Ruff + Pytest) (windows-latest, 3.12)"
+            "Python (Ruff + Pytest) (macos-latest, 3.11)"
+            "Python (Ruff + Pytest) (macos-latest, 3.12)"
+          )
+          release_sha="${{ steps.version.outputs.commit_sha }}"
+          checks_json="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${release_sha}/check-runs?per_page=100")"
+          for check_name in "${required_checks[@]}"; do
+            conclusion="$(jq -r --arg name "$check_name" \
+              '.check_runs[] | select(.name == $name) | .conclusion' \
+              <<<"$checks_json" | head -n 1)"
+            if [[ "$conclusion" != "success" ]]; then
+              echo "::error::Required check '$check_name' is '$conclusion' for ${release_sha}."
+              exit 1
+            fi
+          done
+
+      - name: Install packaging tools
+        run: python -m pip install --disable-pip-version-check build twine
+
+      - name: Build and validate daemon distributions
+        working-directory: daemon
+        run: |
+          python -m build
+          python -m twine check dist/*
+          python ../scripts/check_daemon_artifact.py dist/*.whl
+
+      - name: Upload validated daemon distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: pilot-daemon-${{ steps.version.outputs.version }}
+          path: daemon/dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-daemon-to-pypi:
+    name: Publish validated daemon to PyPI
+    needs: release-gate
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_pypi == true
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Download validated daemon distributions
+        uses: actions/download-artifact@v5
+        with:
+          name: pilot-daemon-${{ needs.release-gate.outputs.version }}
+          path: dist
+
+      - name: Refuse to overwrite an existing PyPI version
+        env:
+          VERSION: ${{ needs.release-gate.outputs.version }}
+        shell: bash
+        run: |
+          if curl --fail --silent --show-error \
+            "https://pypi.org/pypi/pilot-daemon/${VERSION}/json" > /dev/null; then
+            echo "::error::pilot-daemon ${VERSION} already exists on PyPI."
+            exit 1
+          fi
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m pip install --disable-pip-version-check twine
+          python -m twine upload --verbose dist/*
+
+  build-tauri:
+    name: Build ${{ matrix.label }} installer
+    needs: release-gate
+    if: github.event_name == 'push' || inputs.build_installers == true
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "windows-latest"
+            args: ""
+            label: "Windows"
+          - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin"
+            label: "macOS-ARM"
+          - platform: "macos-latest"
+            args: "--target x86_64-apple-darwin"
+            label: "macOS-Intel"
+          - platform: "ubuntu-22.04"
+            args: ""
+            label: "Linux"
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.release_tag }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "tauri-app/src-tauri -> target"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: tauri-app/ui/package-lock.json
+
+      - name: Install frontend dependencies reproducibly
+        working-directory: tauri-app/ui
+        run: npm ci
+
+      - name: Build and upload draft release artifacts
+        id: tauri
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: "tauri-app"
+          tagName: ${{ github.event_name == 'push' && github.ref_name || inputs.release_tag }}
+          releaseName: "Heliox OS v${{ needs.release-gate.outputs.version }}"
+          releaseBody: |
+            ## Heliox OS v${{ needs.release-gate.outputs.version }}
+
+            This is a **draft prerelease** pending clean-machine installation,
+            first-run daemon, hardware-input, and artifact verification.
+
+            Python 3.11+ is required. The desktop app creates its private
+            environment on first launch.
+          generateReleaseNotes: true
+          releaseDraft: true
+          prerelease: true
+          args: ${{ matrix.args }}
+
+      - name: Verify Windows artifacts
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $artifacts = Get-ChildItem `
+            -Path tauri-app/src-tauri/target/release/bundle `
+            -Recurse -File -Include *.exe,*.msi
+          if (-not $artifacts) {
+            throw "No Windows installer artifacts were produced."
+          }
+
+      - name: Verify macOS artifacts
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          app_count="$(find tauri-app/src-tauri/target -name '*.app' | wc -l | tr -d ' ')"
+          dmg_count="$(find tauri-app/src-tauri/target -name '*.dmg' | wc -l | tr -d ' ')"
+          if [[ "$app_count" == "0" || "$dmg_count" == "0" ]]; then
+            echo "::error::Expected macOS app and DMG artifacts were not produced."
+            exit 1
+          fi
+
+      - name: Verify Linux package structures
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          bundle_dir="tauri-app/src-tauri/target/release/bundle"
+          test -n "$(find "$bundle_dir" -name '*.AppImage' -print -quit)"
+          deb="$(find "$bundle_dir" -name '*.deb' -print -quit)"
+          rpm="$(find "$bundle_dir" -name '*.rpm' -print -quit)"
+          test -n "$deb"
+          test -n "$rpm"
+          dpkg-deb --info "$deb" > /dev/null
+          file "$rpm" | grep -q 'RPM'

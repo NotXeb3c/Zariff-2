@@ -1,0 +1,7 @@
+# Marketplace publication authority. Enforce this owner through the main
+# branch ruleset so plugin pull requests cannot merge without moderation.
+/plugins/ @VyomKulshrestha
+/scripts/validate_marketplace.py @VyomKulshrestha
+/daemon/pilot/plugins/marketplace.py @VyomKulshrestha
+/docs/PLUGIN_MARKETPLACE.md @VyomKulshrestha
+/.github/workflows/marketplace.yml @VyomKulshrestha

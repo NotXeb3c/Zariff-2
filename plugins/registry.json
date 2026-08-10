@@ -1,0 +1,232 @@
+{
+  "schema_version": 1,
+  "repository": "VyomKulshrestha/Heliox-OS",
+  "ref": "main",
+  "submission_url": "https://github.com/VyomKulshrestha/Heliox-OS/blob/main/docs/PLUGIN_MARKETPLACE.md",
+  "plugins": [
+    {
+      "name": "home-assistant",
+      "description": "Control smart home devices via Home Assistant API",
+      "version": "1.0.0",
+      "author": "VyomKulshrestha",
+      "url": "https://github.com/VyomKulshrestha/Heliox-OS/tree/main/plugins/home-assistant",
+      "tools": [
+        {
+          "name": "ha_lights",
+          "description": "List all lights in Home Assistant",
+          "inputs": [],
+          "outputs": [
+            "lights"
+          ],
+          "permission_tier": 2,
+          "action_type": "api_call"
+        },
+        {
+          "name": "ha_set_light",
+          "description": "Turn a light on or off",
+          "inputs": [
+            "entity_id",
+            "state"
+          ],
+          "outputs": [
+            "result"
+          ],
+          "permission_tier": 2,
+          "action_type": "api_call"
+        }
+      ],
+      "capabilities": {
+        "filesystem": {
+          "read": [],
+          "write": []
+        },
+        "network_domains": [
+          "homeassistant.local"
+        ],
+        "processes": [],
+        "credentials": [
+          "HA_URL",
+          "HA_TOKEN"
+        ],
+        "clipboard": {
+          "read": false,
+          "write": false
+        },
+        "media": {
+          "camera": false,
+          "microphone": false
+        },
+        "data_retention": {
+          "mode": "none",
+          "max_days": 0
+        },
+        "destructive_actions": true
+      },
+      "package": {
+        "path": "plugins/home-assistant",
+        "files": [
+          {
+            "path": "manifest.json",
+            "sha256": "6169a778c556b9238ab92c2f729b7101753aaf217dc97d9465132b5d84c65dca"
+          },
+          {
+            "path": "plugin.py",
+            "sha256": "7d32a0c210515f554c108ef9051e70e7179ed93228976e4fa89d7dbce3282bab"
+          }
+        ]
+      }
+    },
+    {
+      "name": "spotify-control",
+      "description": "Control Spotify playback through the Spotify Web API",
+      "version": "1.0.0",
+      "author": "community",
+      "url": "https://github.com/VyomKulshrestha/Heliox-OS/tree/main/plugins/spotify-control",
+      "tools": [
+        {
+          "name": "spotify_play",
+          "description": "Start or resume Spotify playback",
+          "inputs": [],
+          "outputs": [
+            "result"
+          ],
+          "permission_tier": 2,
+          "action_type": "api_call"
+        },
+        {
+          "name": "spotify_pause",
+          "description": "Pause Spotify playback",
+          "inputs": [],
+          "outputs": [
+            "result"
+          ],
+          "permission_tier": 2,
+          "action_type": "api_call"
+        },
+        {
+          "name": "spotify_now_playing",
+          "description": "Get currently playing track info",
+          "inputs": [],
+          "outputs": [
+            "track",
+            "artist",
+            "album"
+          ],
+          "permission_tier": 1,
+          "action_type": "api_call"
+        }
+      ],
+      "capabilities": {
+        "filesystem": {
+          "read": [],
+          "write": []
+        },
+        "network_domains": [
+          "api.spotify.com"
+        ],
+        "processes": [],
+        "credentials": [
+          "SPOTIFY_ACCESS_TOKEN"
+        ],
+        "clipboard": {
+          "read": false,
+          "write": false
+        },
+        "media": {
+          "camera": false,
+          "microphone": false
+        },
+        "data_retention": {
+          "mode": "none",
+          "max_days": 0
+        },
+        "destructive_actions": false
+      },
+      "package": {
+        "path": "plugins/spotify-control",
+        "files": [
+          {
+            "path": "manifest.json",
+            "sha256": "55da1b15e972df7362ae5efbb3697cc57813b27c251f3006c389e1a13c841016"
+          },
+          {
+            "path": "plugin.py",
+            "sha256": "f77f6434f1b8b8d51564d3cc1913a9e914535171ab1d68793be3ba2458e81337"
+          }
+        ]
+      }
+    },
+    {
+      "name": "weather",
+      "description": "Get live current weather and forecasts from wttr.in",
+      "version": "1.0.0",
+      "author": "community",
+      "url": "https://github.com/VyomKulshrestha/Heliox-OS/tree/main/plugins/weather",
+      "tools": [
+        {
+          "name": "get_weather",
+          "description": "Get current weather for a city",
+          "inputs": [
+            "city"
+          ],
+          "outputs": [
+            "temperature",
+            "condition",
+            "humidity"
+          ],
+          "permission_tier": 1,
+          "action_type": "api_call"
+        },
+        {
+          "name": "get_forecast",
+          "description": "Get 5-day weather forecast",
+          "inputs": [
+            "city"
+          ],
+          "outputs": [
+            "forecast"
+          ],
+          "permission_tier": 1,
+          "action_type": "api_call"
+        }
+      ],
+      "capabilities": {
+        "filesystem": {
+          "read": [],
+          "write": []
+        },
+        "network_domains": [
+          "wttr.in"
+        ],
+        "processes": [],
+        "credentials": [],
+        "clipboard": {
+          "read": false,
+          "write": false
+        },
+        "media": {
+          "camera": false,
+          "microphone": false
+        },
+        "data_retention": {
+          "mode": "none",
+          "max_days": 0
+        },
+        "destructive_actions": false
+      },
+      "package": {
+        "path": "plugins/weather",
+        "files": [
+          {
+            "path": "manifest.json",
+            "sha256": "88b64fbe04d712a4060711ab501f30725f15e14756711946e20be9477ee22943"
+          },
+          {
+            "path": "plugin.py",
+            "sha256": "47fb24a0edea42f28c7f64bb7790782991ef0a66d1f4fb82eabb7d9f6e0a073d"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pilot-daemon"
+version = "0.10.1"
+description = "AI-powered autonomous computer agent — full system control"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+
+dependencies = [
+    "websockets>=13.0",
+    "pydantic>=2.6",
+    "aiofiles>=24.1",
+    "aiosqlite>=0.20",
+    "httpx>=0.27",
+    "tomli>=2.0; python_version < '3.12'",
+    "tomli-w>=1.0",
+    "cryptography>=43.0",
+    "keyring>=25.0",
+    "psutil>=5.9",
+    "tiktoken>=0.7",
+    "numpy==2.2.6",
+    "scipy>=1.14.1,<1.16",
+    "scikit-learn>=1.3.0",
+    "river==0.23.0",
+    "icalendar>=5.0.0",
+    "caldav>=1.0.0",
+]
+
+[project.optional-dependencies]
+full = [
+    "chromadb>=0.5",
+    "faiss-cpu>=1.7.0",
+    "sentence-transformers>=2.2.0",
+    "pyperclip>=1.8",
+    "SecretStorage>=3.3; sys_platform == 'linux'",
+    "zeroconf>=0.131",
+]
+llamacpp = ["llama-cpp-python>=0.3", "pynvml>=11.5"]
+
+# Tier 1: Game Changers
+automation = [
+    "pyautogui>=0.9",
+    "Pillow>=10.0",
+    "pyperclip>=1.8",
+]
+vision = [
+    "easyocr>=1.7",
+    "Pillow>=10.0",
+    "opencv-python>=4.9.0.80",
+    "mediapipe>=0.10.11",
+]
+browser = [
+    "playwright>=1.40",
+]
+pty = [
+    "ptyprocess>=0.7; sys_platform != 'win32'",
+]
+
+# LAN mesh networking
+network = [
+    "zeroconf>=0.131",
+]
+
+# Remote execution
+ssh = [
+    "paramiko>=3.4",
+]
+
+# WASM plugin sandbox
+wasm = [
+    "wasmtime>=18.0",
+]
+
+# Tier 2: Multipliers
+documents = [
+    "pypdf>=4.0",
+    "python-docx>=1.0",
+    "openpyxl>=3.1",
+    "beautifulsoup4>=4.12",
+]
+
+# User Manual Supervision (opt-in global keyboard/mouse hook, see
+# pilot.system.input_hook) -- kept as its own extras group since it's a much
+# bigger privacy surface than anything else in `all`.
+supervision = [
+    "pynput>=1.7",
+]
+
+# Voice: local speech-to-text (openai-whisper) and text-to-speech (Kokoro
+# or Kyutai Pocket TTS), CPU-only and free. Ships
+# by default for real end users (see main.rs's setup_venv_in_background,
+# which installs "pilot-daemon[all]") -- config.voice.tts_engine still
+# lets the user choose Kokoro, Pocket TTS, or their OS's built-in voice in
+# Settings, but the underlying package is present either way so that
+# choice actually works out of the box, not just as a config default that
+# silently no-ops without a separate manual pip install. sounddevice is
+# not a dependency of the pocket-tts package itself (its own examples just
+# save a WAV file) -- it's required here because pocket_tts.py's play()
+# uses it for actual audio output. voice.py's fallback to OS-native TTS
+# (and to Windows Speech Recognition for STT) still applies on any
+# platform where these fail to install or load.
+voice = [
+    "kokoro>=0.9.4",
+    "soundfile>=0.12",
+    "pocket-tts>=1.0",
+    "sounddevice>=0.4",
+    "soundcard>=0.4.3; sys_platform == 'win32'",
+    "openai-whisper>=20231117",
+]
+
+# Everything installable from PyPI.
+all = [
+    "pilot-daemon[full,automation,vision,browser,documents,ssh,network,wasm,supervision,voice]",
+]
+
+dev = [
+    "Pillow>=10.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+pilot-daemon = "pilot.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pilot"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

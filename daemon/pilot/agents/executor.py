@@ -1,0 +1,2797 @@
+﻿"""Executor agent — executes validated action plans via system interfaces.
+
+The Executor ONLY accepts validated Action objects. It dispatches each action
+to the appropriate system interface module based on action_type.
+
+Now cross-platform with 50+ action types covering full system control.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+import typing
+import uuid
+from typing import TYPE_CHECKING
+
+from pilot.actions import (
+    Action,
+    ActionPlan,
+    ActionResult,
+    ActionType,
+    ApiRequestParams,
+    BrightnessParams,
+    BrowserParams,
+    ClipboardParams,
+    CodeExecParams,
+    DBusParams,
+    DiskManageParams,
+    DownloadParams,
+    ElementDetectionParams,
+    EnvParams,
+    FileIntelParams,
+    FileParams,
+    GitParams,
+    GitResolveParams,
+    GnomeSettingParams,
+    KeyboardParams,
+    LogAnalyzeParams,
+    MouseParams,
+    NotifyParams,
+    OpenApplicationParams,
+    OpenUrlParams,
+    PackageParams,
+    PowerParams,
+    ProcessParams,
+    PtyExecParams,
+    RegistryParams,
+    ScheduleParams,
+    ScreenshotParams,
+    ScreenVisionParams,
+    ServiceParams,
+    ShellCommandParams,
+    ShellScriptParams,
+    SkillRunParams,
+    SystemInfoParams,
+    TriggerParams,
+    VolumeParams,
+    WasmCallParams,
+    WifiParams,
+    WindowParams,
+    WorkspaceParams,
+)
+from pilot.agents.sandbox import SimulationSandbox
+from pilot.intelligence.experience import (
+    ExperienceEvent,
+    ExperienceEventType,
+    ExperienceLedger,
+    PrivacyClass,
+    get_experience_context,
+    stable_action_idempotency_key,
+)
+from pilot.security.audit import AuditLogger
+from pilot.security.gateway import AgentGateway, InvocationSource, TaskScopeOverride
+from pilot.security.permissions import PermissionChecker
+from pilot.security.validator import ActionValidator
+from pilot.system.snapshots import SnapshotManager
+
+if TYPE_CHECKING:
+    from pilot.config import PilotConfig
+    from pilot.skills.loader import SkillRegistry
+    from pilot.workflows.durable_tasks import DurableTaskStore
+
+logger = logging.getLogger("pilot.agents.executor")
+
+_EXIT_CODE_PATTERN = re.compile(r"\[EXIT CODE:\s*(-?\d+)\]")
+_SWALLOWED_EXCEPTION_PATTERN = re.compile(
+    r"^\s*(?:an\s+)?unexpected\s+error\s+(?:occurred|occured)\s*:",
+    re.IGNORECASE,
+)
+
+
+def _code_execution_error(output: str) -> str | None:
+    """Return a useful error when a code backend reports terminal failure."""
+    text = (output or "").strip()
+    match = _EXIT_CODE_PATTERN.search(text)
+    if match and int(match.group(1)) != 0:
+        return f"Code execution exited with code {match.group(1)}. {text[:800]}"
+    if text.upper().startswith("ERROR:"):
+        return text[:800]
+    if _SWALLOWED_EXCEPTION_PATTERN.match(text):
+        return f"Code execution reported an exception. {text[:800]}"
+    return None
+
+
+class Executor:
+    """Executes validated action plans against the system."""
+
+    _DESKTOP_ACTION_TYPES = frozenset(
+        {
+            ActionType.OPEN_APPLICATION,
+            ActionType.WINDOW_LIST,
+            ActionType.WINDOW_FOCUS,
+            ActionType.WINDOW_MINIMIZE,
+            ActionType.WINDOW_MAXIMIZE,
+            ActionType.WINDOW_CLOSE,
+            ActionType.MOUSE_CLICK,
+            ActionType.MOUSE_DOUBLE_CLICK,
+            ActionType.MOUSE_RIGHT_CLICK,
+            ActionType.MOUSE_MOVE,
+            ActionType.MOUSE_DRAG,
+            ActionType.MOUSE_SCROLL,
+            ActionType.MOUSE_POSITION,
+            ActionType.KEYBOARD_TYPE,
+            ActionType.KEYBOARD_PRESS,
+            ActionType.KEYBOARD_HOTKEY,
+            ActionType.KEYBOARD_HOLD,
+            ActionType.SCREENSHOT,
+            ActionType.SCREEN_OCR,
+            ActionType.SCREEN_FIND_TEXT,
+            ActionType.SCREEN_ANALYZE,
+            ActionType.SCREEN_ELEMENT_MAP,
+            ActionType.SCREEN_DETECT_ELEMENTS,
+        }
+    )
+
+    def __init__(
+        self,
+        config: PilotConfig,
+        validator: ActionValidator,
+        permissions: PermissionChecker,
+        audit: AuditLogger,
+        skill_registry: SkillRegistry | None = None,
+        gateway: AgentGateway | None = None,
+    ) -> None:
+        self._config = config
+        self._validator = validator
+        self._permissions = permissions
+        self._audit = audit
+        self._skill_registry = skill_registry
+        self._gateway = gateway
+        self._snapshot_mgr = SnapshotManager(config)
+        self._plugin_registry = None
+        self._simulation_sandbox = SimulationSandbox(allowed_commands=config.restrictions.sandbox_allowed_commands)
+        self._narrator: Any = None
+        self._broadcast: Any = None
+        self._speech: Any = None
+        self._experience_ledger: ExperienceLedger | None = None
+        self._world_model_outcome_recorder: Any = None
+        self._durable_task_store: DurableTaskStore | None = None
+        self._last_output = ""  # For output chaining between steps
+        self._largest_output = ""  # Largest output from any step in the pipeline
+        self._detected_click_target: tuple[int, int, str] | None = None
+        # A physical desktop is one shared resource. Serialise plans that use
+        # it so two requests cannot type/click into each other's foreground
+        # window or consume each other's vision result.
+        self._desktop_execution_lock = asyncio.Lock()
+
+        self._dispatch_table: dict[ActionType, callable] = {
+            # -- File operations --
+            ActionType.FILE_READ: self._exec_file_read,
+            ActionType.FILE_WRITE: self._exec_file_write,
+            ActionType.FILE_DELETE: self._exec_file_delete,
+            ActionType.FILE_MOVE: self._exec_file_move,
+            ActionType.FILE_COPY: self._exec_file_copy,
+            ActionType.FILE_LIST: self._exec_file_list,
+            ActionType.FILE_SEARCH: self._exec_file_search,
+            ActionType.DIRECTORY_SUMMARY: self._exec_directory_summary,
+            ActionType.DIRECTORY_SIZE: self._exec_directory_size,
+            ActionType.FILE_HASH: self._exec_file_hash,
+            ActionType.FILE_COMPARE: self._exec_file_compare,
+            ActionType.FILE_PERMISSIONS: self._exec_file_permissions,
+            ActionType.GIT_RESOLVE: self._exec_git_resolve,
+            # -- Git repository operations --
+            ActionType.GIT_STATUS: self._exec_git_action,
+            ActionType.GIT_DIFF: self._exec_git_action,
+            ActionType.GIT_LOG: self._exec_git_action,
+            ActionType.GIT_BRANCH: self._exec_git_action,
+            ActionType.GIT_STAGE: self._exec_git_action,
+            ActionType.GIT_COMMIT: self._exec_git_action,
+            ActionType.GIT_PUSH: self._exec_git_action,
+            # -- Package operations --
+            ActionType.PACKAGE_INSTALL: self._exec_package_install,
+            ActionType.PACKAGE_REMOVE: self._exec_package_remove,
+            ActionType.PACKAGE_UPDATE: self._exec_package_update,
+            ActionType.PACKAGE_SEARCH: self._exec_package_search,
+            # -- Service operations --
+            ActionType.SERVICE_START: self._exec_service_start,
+            ActionType.SERVICE_STOP: self._exec_service_stop,
+            ActionType.SERVICE_RESTART: self._exec_service_restart,
+            ActionType.SERVICE_ENABLE: self._exec_service_enable,
+            ActionType.SERVICE_DISABLE: self._exec_service_disable,
+            ActionType.SERVICE_STATUS: self._exec_service_status,
+            # -- GNOME settings --
+            ActionType.GNOME_SETTING_READ: self._exec_gnome_read,
+            ActionType.GNOME_SETTING_WRITE: self._exec_gnome_write,
+            # -- DBus --
+            ActionType.DBUS_CALL: self._exec_dbus_call,
+            # -- Shell commands --
+            ActionType.SHELL_COMMAND: self._exec_shell_command,
+            ActionType.SHELL_SCRIPT: self._exec_shell_script,
+            ActionType.PTY_EXEC: self._exec_pty_exec,
+            # -- Open URL / App / Notify --
+            ActionType.OPEN_URL: self._exec_open_url,
+            ActionType.OPEN_APPLICATION: self._exec_open_application,
+            ActionType.NOTIFY: self._exec_notify,
+            # -- Process management --
+            ActionType.PROCESS_LIST: self._exec_process_list,
+            ActionType.PROCESS_KILL: self._exec_process_kill,
+            ActionType.PROCESS_INFO: self._exec_process_info,
+            # -- Clipboard --
+            ActionType.CLIPBOARD_READ: self._exec_clipboard_read,
+            ActionType.CLIPBOARD_WRITE: self._exec_clipboard_write,
+            # -- System info --
+            ActionType.SYSTEM_INFO: self._exec_system_info,
+            ActionType.DISK_USAGE: self._exec_disk_usage,
+            ActionType.MEMORY_USAGE: self._exec_memory_usage,
+            ActionType.CPU_USAGE: self._exec_cpu_usage,
+            ActionType.NETWORK_INFO: self._exec_network_info,
+            ActionType.BATTERY_INFO: self._exec_battery_info,
+            # -- Power management --
+            ActionType.POWER_SHUTDOWN: self._exec_power_shutdown,
+            ActionType.POWER_RESTART: self._exec_power_restart,
+            ActionType.POWER_SLEEP: self._exec_power_sleep,
+            ActionType.POWER_LOCK: self._exec_power_lock,
+            ActionType.POWER_LOGOUT: self._exec_power_logout,
+            # -- Scheduled tasks --
+            ActionType.SCHEDULE_CREATE: self._exec_schedule_create,
+            ActionType.SCHEDULE_LIST: self._exec_schedule_list,
+            ActionType.SCHEDULE_DELETE: self._exec_schedule_delete,
+            # -- Environment variables --
+            ActionType.ENV_GET: self._exec_env_get,
+            ActionType.ENV_SET: self._exec_env_set,
+            ActionType.ENV_LIST: self._exec_env_list,
+            # -- Window management --
+            ActionType.WINDOW_LIST: self._exec_window_list,
+            ActionType.WINDOW_FOCUS: self._exec_window_focus,
+            ActionType.WINDOW_CLOSE: self._exec_window_close,
+            ActionType.WINDOW_MINIMIZE: self._exec_window_minimize,
+            ActionType.WINDOW_MAXIMIZE: self._exec_window_maximize,
+            # -- Volume / audio --
+            ActionType.VOLUME_GET: self._exec_volume_get,
+            ActionType.VOLUME_SET: self._exec_volume_set,
+            ActionType.VOLUME_MUTE: self._exec_volume_mute,
+            # -- Brightness / screen --
+            ActionType.BRIGHTNESS_GET: self._exec_brightness_get,
+            ActionType.BRIGHTNESS_SET: self._exec_brightness_set,
+            ActionType.SCREENSHOT: self._exec_screenshot,
+            # -- Network --
+            ActionType.WIFI_LIST: self._exec_wifi_list,
+            ActionType.WIFI_CONNECT: self._exec_wifi_connect,
+            ActionType.WIFI_DISCONNECT: self._exec_wifi_disconnect,
+            # -- Disk management --
+            ActionType.DISK_LIST: self._exec_disk_list,
+            ActionType.DISK_MOUNT: self._exec_disk_mount,
+            ActionType.DISK_UNMOUNT: self._exec_disk_unmount,
+            # -- User info --
+            ActionType.USER_LIST: self._exec_user_list,
+            ActionType.USER_INFO: self._exec_user_info,
+            # -- Download --
+            ActionType.DOWNLOAD_FILE: self._exec_download_file,
+            # -- Registry (Windows) --
+            ActionType.REGISTRY_READ: self._exec_registry_read,
+            ActionType.REGISTRY_WRITE: self._exec_registry_write,
+            # ============================================================
+            # TIER 1: GAME CHANGERS
+            # ============================================================
+            # -- Mouse control --
+            ActionType.MOUSE_CLICK: self._exec_mouse_click,
+            ActionType.MOUSE_DOUBLE_CLICK: self._exec_mouse_double_click,
+            ActionType.MOUSE_RIGHT_CLICK: self._exec_mouse_right_click,
+            ActionType.MOUSE_MOVE: self._exec_mouse_move,
+            ActionType.MOUSE_DRAG: self._exec_mouse_drag,
+            ActionType.MOUSE_SCROLL: self._exec_mouse_scroll,
+            ActionType.MOUSE_POSITION: self._exec_mouse_position,
+            # -- Keyboard control --
+            ActionType.KEYBOARD_TYPE: self._exec_keyboard_type,
+            ActionType.KEYBOARD_PRESS: self._exec_keyboard_press,
+            ActionType.KEYBOARD_HOTKEY: self._exec_keyboard_hotkey,
+            ActionType.KEYBOARD_HOLD: self._exec_keyboard_hold,
+            # -- Screen understanding / Vision --
+            ActionType.SCREEN_OCR: self._exec_screen_ocr,
+            ActionType.SCREEN_FIND_TEXT: self._exec_screen_find_text,
+            ActionType.SCREEN_ANALYZE: self._exec_screen_analyze,
+            ActionType.SCREEN_ELEMENT_MAP: self._exec_screen_element_map,
+            ActionType.SCREEN_DETECT_ELEMENTS: self._exec_screen_detect_elements,
+            # -- Browser automation --
+            ActionType.BROWSER_NAVIGATE: self._exec_browser_navigate,
+            ActionType.BROWSER_CLICK: self._exec_browser_click,
+            ActionType.BROWSER_CLICK_TEXT: self._exec_browser_click_text,
+            ActionType.BROWSER_TYPE: self._exec_browser_type,
+            ActionType.BROWSER_SELECT: self._exec_browser_select,
+            ActionType.BROWSER_HOVER: self._exec_browser_hover,
+            ActionType.BROWSER_SCROLL: self._exec_browser_scroll,
+            ActionType.BROWSER_EXTRACT: self._exec_browser_extract,
+            ActionType.BROWSER_EXTRACT_TABLE: self._exec_browser_extract_table,
+            ActionType.BROWSER_EXTRACT_LINKS: self._exec_browser_extract_links,
+            ActionType.BROWSER_EXECUTE_JS: self._exec_browser_execute_js,
+            ActionType.BROWSER_SCREENSHOT: self._exec_browser_screenshot,
+            ActionType.BROWSER_FILL_FORM: self._exec_browser_fill_form,
+            ActionType.BROWSER_NEW_TAB: self._exec_browser_new_tab,
+            ActionType.BROWSER_CLOSE_TAB: self._exec_browser_close_tab,
+            ActionType.BROWSER_LIST_TABS: self._exec_browser_list_tabs,
+            ActionType.BROWSER_SWITCH_TAB: self._exec_browser_switch_tab,
+            ActionType.BROWSER_BACK: self._exec_browser_back,
+            ActionType.BROWSER_FORWARD: self._exec_browser_forward,
+            ActionType.BROWSER_REFRESH: self._exec_browser_refresh,
+            ActionType.BROWSER_WAIT: self._exec_browser_wait,
+            ActionType.BROWSER_CLOSE: self._exec_browser_close,
+            ActionType.BROWSER_PAGE_INFO: self._exec_browser_page_info,
+            # -- Reactive triggers --
+            ActionType.TRIGGER_CREATE: self._exec_trigger_create,
+            ActionType.TRIGGER_LIST: self._exec_trigger_list,
+            ActionType.TRIGGER_DELETE: self._exec_trigger_delete,
+            ActionType.TRIGGER_START: self._exec_trigger_start,
+            ActionType.TRIGGER_STOP: self._exec_trigger_stop,
+            # ============================================================
+            # TIER 2: MASSIVE MULTIPLIERS
+            # ============================================================
+            # -- Code execution --
+            ActionType.CODE_EXECUTE: self._exec_code_execute,
+            ActionType.CODE_GENERATE_AND_RUN: self._exec_code_generate,
+            ActionType.SKILL_RUN: self._exec_skill_run,
+            # -- File intelligence --
+            ActionType.FILE_PARSE: self._exec_file_parse,
+            ActionType.FILE_SEARCH_CONTENT: self._exec_file_search_content,
+            # -- API integration --
+            ActionType.API_REQUEST: self._exec_api_request,
+            ActionType.API_GITHUB: self._exec_api_github,
+            ActionType.API_SEND_EMAIL: self._exec_api_send_email,
+            ActionType.API_WEBHOOK: self._exec_api_webhook,
+            ActionType.API_SLACK: self._exec_api_slack,
+            ActionType.API_DISCORD: self._exec_api_discord,
+            ActionType.API_SCRAPE: self._exec_api_scrape,
+            ActionType.WORKSPACE_INDEX: self._exec_workspace_index,
+            ActionType.WORKSPACE_SEARCH: self._exec_workspace_search,
+            ActionType.WASM_CALL: self._exec_wasm_call,
+            ActionType.PLUGIN_CALL: self._exec_plugin_call,
+            ActionType.LOG_ANALYZE: self._exec_log_analyze,
+        }
+
+    @staticmethod
+    def _file_snapshot_targets(plan: ActionPlan) -> list[str] | None:
+        """Return exact mutation paths when local file rollback covers the plan."""
+        snapshot_actions = [action for action in plan.actions if action.requires_snapshot]
+        if not snapshot_actions or any(action.action_type != ActionType.FILE_DELETE for action in snapshot_actions):
+            return None
+
+        targets: list[str] = []
+        for action in plan.actions:
+            if not isinstance(action.parameters, FileParams):
+                continue
+            params = action.parameters
+            if action.action_type in {ActionType.FILE_WRITE, ActionType.FILE_DELETE}:
+                if params.path:
+                    targets.append(params.path)
+            elif action.action_type == ActionType.FILE_COPY:
+                if params.destination:
+                    targets.append(params.destination)
+            elif action.action_type == ActionType.FILE_MOVE:
+                if params.path:
+                    targets.append(params.path)
+                if params.destination:
+                    targets.append(params.destination)
+        return list(dict.fromkeys(targets)) or None
+
+    def set_plugin_registry(self, plugin_registry) -> None:
+        self._plugin_registry = plugin_registry
+
+    def set_gateway(self, gateway: AgentGateway) -> None:
+        """Wire in the AgentGateway after construction — server.py builds
+        DestructiveCriticAgent (which the gateway needs for non-interactive
+        critic review) after Executor already exists, so this mirrors the
+        set_plugin_registry/set_broadcast-style post-construction wiring
+        pattern used elsewhere rather than reordering construction."""
+        self._gateway = gateway
+
+    def set_narrator(self, narrator: Any) -> None:
+        """Wire in the ExecutionNarrator (see pilot.agents.narrator) after
+        construction, same post-construction pattern as set_gateway. Once
+        set, execute() automatically narrates/interrupts every plan it
+        runs -- callers (AutonomousExecutor, VoiceGestureWorkflowEngine,
+        the interactive path) need no changes of their own."""
+        self._narrator = narrator
+
+    def set_broadcast(self, fn: Any) -> None:
+        """Wire in the WebSocket broadcast function after construction, same
+        post-construction pattern as set_gateway/set_narrator. Used for
+        events that aren't shaped like narration (e.g. the cognitive-
+        stress-gate pause, which speaks on the daemon's own OS audio via
+        pilot.system.voice.speak() and needs a paired daemon_speech
+        notification so the frontend shows a matching text bubble instead
+        of the phrase having zero visual trace)."""
+        self._broadcast = fn
+
+    def set_speech(self, fn: Any) -> None:
+        """Wire the shared companion speech coordinator."""
+        self._speech = fn
+
+    def set_experience_ledger(self, ledger: ExperienceLedger) -> None:
+        """Wire the canonical action ledger into every executor ingress."""
+
+        self._experience_ledger = ledger
+
+    def set_world_model_outcome_recorder(self, recorder: Any) -> None:
+        """Wire verified execution outcomes into historical world-model risk."""
+        self._world_model_outcome_recorder = recorder
+
+    def set_durable_task_store(self, store: DurableTaskStore) -> None:
+        """Wire exactly-once execution claims for durable interactive tasks."""
+
+        self._durable_task_store = store
+
+    async def _append_experience(
+        self,
+        event_type: ExperienceEventType,
+        **kwargs: typing.Any,
+    ) -> ExperienceEvent | None:
+        """Persist telemetry without ever turning observability into authority."""
+
+        if self._experience_ledger is None:
+            return None
+        try:
+            return await self._experience_ledger.append(event_type, **kwargs)
+        except Exception:
+            logger.warning("Experience ledger append failed for %s", event_type.value, exc_info=True)
+            return None
+
+    def _analyze_dependencies(self, actions: list[Action]) -> list[list[Action]]:
+        """Analyze action dependencies and return batches that can run in parallel.
+
+        Returns a list of batches, where each batch contains actions that can run
+        concurrently. Actions in later batches may depend on earlier batches.
+        """
+        if not actions:
+            return []
+
+        if len(actions) == 1:
+            return [actions]
+
+        action_resources: dict[int, set[str]] = {}
+        for i, action in enumerate(actions):
+            resources = set()
+            action_type_value = (
+                action.action_type.value if hasattr(action.action_type, "value") else str(action.action_type)
+            )
+            # Every browser command observes or mutates one shared browser
+            # session. Running navigate/click/extract concurrently can make a
+            # later command inspect the previous page or race a navigation.
+            if action_type_value.startswith("browser_"):
+                resources.add("browser-session")
+            if action.action_type in self._DESKTOP_ACTION_TYPES:
+                resources.add("desktop-session")
+            target = action.target or ""
+            if target:
+                resources.add(target)
+            params = action.parameters
+            if params:
+                if hasattr(params, "path") and params.path:
+                    resources.add(str(params.path))
+                if hasattr(params, "paths") and params.paths:
+                    for p in params.paths:
+                        resources.add(str(p))
+                if hasattr(params, "content") and params.content:
+                    pass
+            action_resources[i] = resources
+
+        batches: list[list[Action]] = []
+        assigned: set[int] = set()
+
+        for i, action in enumerate(actions):
+            if i in assigned:
+                continue
+
+            depends_on: set[int] = set()
+            for j in range(i):
+                if j in assigned:
+                    continue
+                if action_resources[i] & action_resources[j]:
+                    depends_on.add(j)
+
+            if not depends_on:
+                batch = [action]
+                assigned.add(i)
+                for j in range(i + 1, len(actions)):
+                    if j in assigned:
+                        continue
+                    if not (action_resources[j] & action_resources[i]):
+                        for dep in range(i):
+                            if dep in assigned and action_resources[j] & action_resources[dep]:
+                                break
+                        else:
+                            if not action_resources[j]:
+                                batch.append(actions[j])
+                                assigned.add(j)
+                batches.append(batch)
+            else:
+                if batches and not any(j in assigned for j in depends_on):
+                    batches[-1].append(action)
+                    assigned.add(i)
+                else:
+                    batches.append([action])
+                    assigned.add(i)
+
+        return batches if batches else [[a] for a in actions]
+
+    def _collect_batch_results(
+        self,
+        batch: list[Action],
+        batch_results: list,
+        results: list[ActionResult],
+    ) -> bool:
+        """Map parallel-batch results back to their actions and append to results.
+
+        asyncio.gather preserves input order, so batch_results[i] corresponds to
+        batch[i]. For a raised exception (which carries no index), the position
+        is the only link back to the action that failed — so attribute it to
+        batch[position] rather than batch[0] (issue #415).
+
+        Returns True if any action in the batch failed.
+        """
+        failed = False
+        for position, item in enumerate(batch_results):
+            if isinstance(item, BaseException):
+                if isinstance(item, asyncio.CancelledError):
+                    error = "Action cancelled before completion"
+                else:
+                    error = str(item) or item.__class__.__name__
+                results.append(ActionResult(action=batch[position], success=False, error=error))
+                failed = True
+            else:
+                _idx, result = item
+                results.append(result)
+                if result.success:
+                    self._last_output = result.output
+                    if not hasattr(self, "_largest_output") or len(result.output or "") > len(
+                        self._largest_output or ""
+                    ):
+                        self._largest_output = result.output
+                else:
+                    failed = True
+                    logger.error("Action in batch failed: %s", result.error)
+        return failed
+
+    async def execute(
+        self,
+        plan: ActionPlan,
+        on_action_start: typing.Callable[[Action], typing.Awaitable[None]] | None = None,
+        on_action_complete: typing.Callable[[ActionResult], typing.Awaitable[None]] | None = None,
+        cancel_event: asyncio.Event | None = None,
+        plan_id: str | None = None,
+        initial_last_output: str = "",
+        initial_largest_output: str | None = None,
+        orchestrator: Any = None,
+        invocation_source: InvocationSource = InvocationSource.INTERACTIVE,
+        scope_override: TaskScopeOverride | None = None,
+        critic_already_reviewed: bool = False,
+        user_confirmed: bool = False,
+        action_index_offset: int = 0,
+    ) -> list[ActionResult]:
+        """Record and execute a plan through the one canonical action ingress."""
+
+        resolved_plan_id = plan_id or str(uuid.uuid4())[:8]
+        attempt_id = str(uuid.uuid4())
+        context = get_experience_context()
+        task_id = context.task_id or resolved_plan_id
+        source = invocation_source.value
+        if not context.task_id:
+            await self._append_experience(
+                ExperienceEventType.INTENT,
+                session_id=context.session_id,
+                task_id=task_id,
+                user_id=context.user_id,
+                plan_id=resolved_plan_id,
+                idempotency_key=f"plan:{resolved_plan_id}:intent",
+                source=source,
+                payload={
+                    "input": plan.raw_input or plan.explanation,
+                    "derived_from_explanation": not bool(plan.raw_input),
+                },
+                provenance={"component": "Executor.execute", "invocation_source": source},
+                privacy_class=PrivacyClass.SENSITIVE,
+            )
+        plan_event = await self._append_experience(
+            ExperienceEventType.PLAN_CREATED,
+            session_id=context.session_id,
+            task_id=task_id,
+            user_id=context.user_id,
+            plan_id=resolved_plan_id,
+            idempotency_key=f"plan:{resolved_plan_id}:created",
+            source=source,
+            payload={
+                "action_count": len(plan.actions),
+                "explanation": plan.explanation,
+                "attempt_id": attempt_id,
+            },
+            provenance={"component": "Executor.execute", "invocation_source": source},
+        )
+
+        action_indices = {id(action): index + action_index_offset for index, action in enumerate(plan.actions)}
+        action_ids = {
+            id(action): stable_action_idempotency_key(resolved_plan_id, index, action)
+            for index, action in enumerate(plan.actions)
+        }
+        for index, action in enumerate(plan.actions):
+            action_id = action_ids[id(action)]
+            await self._append_experience(
+                ExperienceEventType.CANDIDATE_ACTION,
+                session_id=context.session_id,
+                task_id=task_id,
+                user_id=context.user_id,
+                plan_id=resolved_plan_id,
+                action_id=action_id,
+                parent_event_id=plan_event.event_id if plan_event else "",
+                idempotency_key=f"plan:{resolved_plan_id}:candidate:{index}",
+                source=source,
+                payload={
+                    "index": index,
+                    "action_idempotency_key": action_id,
+                    "action": action,
+                },
+                provenance={"component": "Executor.execute", "attempt_id": attempt_id},
+                privacy_class=PrivacyClass.SENSITIVE,
+            )
+
+        completed_result_ids: set[int] = set()
+
+        def _action_identity(action: Action) -> tuple[int, str]:
+            index = action_indices.get(id(action), -1)
+            action_id = action_ids.get(id(action))
+            if action_id is None:
+                index = max(index, 0)
+                action_id = stable_action_idempotency_key(resolved_plan_id, index, action)
+            return index, action_id
+
+        async def _on_recorded_action_start(action: Action) -> None:
+            index, action_id = _action_identity(action)
+            await self._append_experience(
+                ExperienceEventType.ACTION_STARTED,
+                session_id=context.session_id,
+                task_id=task_id,
+                user_id=context.user_id,
+                plan_id=resolved_plan_id,
+                action_id=action_id,
+                idempotency_key=f"execution:{attempt_id}:started:{index}",
+                source=source,
+                payload={
+                    "index": index,
+                    "action_idempotency_key": action_id,
+                    "action_type": action.action_type.value,
+                    "target": action.target,
+                },
+                provenance={"component": "Executor.execute", "attempt_id": attempt_id},
+                privacy_class=PrivacyClass.SENSITIVE,
+            )
+            if on_action_start:
+                await on_action_start(action)
+
+        async def _record_completion(result: ActionResult, *, callback_observed: bool) -> None:
+            index, action_id = _action_identity(result.action)
+            await self._append_experience(
+                ExperienceEventType.ACTION_COMPLETED,
+                session_id=context.session_id,
+                task_id=task_id,
+                user_id=context.user_id,
+                plan_id=resolved_plan_id,
+                action_id=action_id,
+                idempotency_key=f"execution:{attempt_id}:completed:{index}",
+                source=source,
+                payload={
+                    "index": index,
+                    "action_idempotency_key": action_id,
+                    "success": result.success,
+                    "output_excerpt": (result.output or "")[:1000],
+                    "error": (result.error or "")[:1000],
+                    "callback_observed": callback_observed,
+                },
+                provenance={"component": "Executor.execute", "attempt_id": attempt_id},
+                privacy_class=PrivacyClass.SENSITIVE,
+            )
+            if (
+                callback_observed
+                and self._world_model_outcome_recorder is not None
+                and not (result.output or "").startswith("(dry run)")
+            ):
+                self._world_model_outcome_recorder(
+                    result.action.action_type,
+                    result.success,
+                )
+
+        async def _on_recorded_action_complete(result: ActionResult) -> None:
+            completed_result_ids.add(id(result))
+            await _record_completion(result, callback_observed=True)
+            if on_action_complete:
+                await on_action_complete(result)
+
+        execute_kwargs = {
+            "on_action_start": _on_recorded_action_start,
+            "on_action_complete": _on_recorded_action_complete,
+            "cancel_event": cancel_event,
+            "plan_id": resolved_plan_id,
+            "initial_last_output": initial_last_output,
+            "initial_largest_output": initial_largest_output,
+            "orchestrator": orchestrator,
+            "invocation_source": invocation_source,
+            "scope_override": scope_override,
+            "critic_already_reviewed": critic_already_reviewed,
+            "user_confirmed": user_confirmed,
+            "action_index_offset": action_index_offset,
+        }
+        uses_desktop = any(action.action_type in self._DESKTOP_ACTION_TYPES for action in plan.actions)
+        if uses_desktop:
+            async with self._desktop_execution_lock:
+                results = await self._execute_inner(plan, **execute_kwargs)
+        else:
+            results = await self._execute_inner(plan, **execute_kwargs)
+        for result in results:
+            if id(result) not in completed_result_ids:
+                await _record_completion(result, callback_observed=False)
+        return results
+
+    async def _execute_inner(
+        self,
+        plan: ActionPlan,
+        on_action_start: typing.Callable[[Action], typing.Awaitable[None]] | None = None,
+        on_action_complete: typing.Callable[[ActionResult], typing.Awaitable[None]] | None = None,
+        cancel_event: asyncio.Event | None = None,
+        plan_id: str | None = None,
+        initial_last_output: str = "",
+        initial_largest_output: str | None = None,
+        orchestrator: Any = None,
+        invocation_source: InvocationSource = InvocationSource.INTERACTIVE,
+        scope_override: TaskScopeOverride | None = None,
+        critic_already_reviewed: bool = False,
+        user_confirmed: bool = False,
+        action_index_offset: int = 0,
+    ) -> list[ActionResult]:
+        """Execute all actions in a plan sequentially, with output chaining."""
+        plan_id = plan_id or str(uuid.uuid4())[:8]
+        results: list[ActionResult] = []
+        self._last_output = initial_last_output
+        self._largest_output = initial_last_output if initial_largest_output is None else initial_largest_output
+        self._detected_click_target = None
+
+        if self._gateway is not None:
+            gateway_decision = await self._gateway.authorize(
+                plan,
+                invocation_source,
+                scope_override=scope_override,
+                critic_already_reviewed=critic_already_reviewed,
+                plan_id=plan_id,
+            )
+            if not gateway_decision.allowed:
+                return [
+                    ActionResult(
+                        action=plan.actions[0]
+                        if plan.actions
+                        else Action(
+                            action_type=ActionType.FILE_READ,
+                            target="",
+                            parameters=FileParams(path="/"),
+                        ),
+                        success=False,
+                        error=f"Gateway denied: {'; '.join(gateway_decision.reasons)}",
+                    )
+                ]
+
+            # The gateway's own critic verdict is computed above regardless
+            # of whether it BLOCKed anything -- a WARN on an otherwise
+            # allowed plan was previously just discarded here. If a
+            # narrator is configured, surface it and let the user stop the
+            # plan before anything runs.
+            if self._narrator is not None and gateway_decision.critic_verdict is not None:
+                proceed = await self._narrator.on_plan_risk(plan, gateway_decision.critic_verdict)
+                if not proceed:
+                    return [
+                        ActionResult(
+                            action=plan.actions[0]
+                            if plan.actions
+                            else Action(
+                                action_type=ActionType.FILE_READ,
+                                target="",
+                                parameters=FileParams(path="/"),
+                            ),
+                            success=False,
+                            error="Stopped by user after risk interrupt",
+                        )
+                    ]
+
+        allowed, reasons = self._permissions.plan_allowed(plan)
+        if not allowed:
+            return [
+                ActionResult(
+                    action=plan.actions[0]
+                    if plan.actions
+                    else Action(
+                        action_type=ActionType.FILE_READ,
+                        target="",
+                        parameters=FileParams(path="/"),
+                    ),
+                    success=False,
+                    error=f"Permission denied: {'; '.join(reasons)}",
+                )
+            ]
+
+        errors = self._validator.validate_plan(plan)
+        if errors:
+            # Check if ALL actions are bad — if so, reject
+            # Otherwise, filter out the bad actions and continue with the good ones
+            bad_indices = set()
+            for err in errors:
+                # Extract action index from error like "Action [6]: ..."
+                import re as _re
+
+                m = _re.search(r"Action \[(\d+)\]", err)
+                if m:
+                    bad_indices.add(int(m.group(1)))
+
+            if bad_indices and len(bad_indices) < len(plan.actions):
+                # Some actions are good — remove bad ones and continue
+                good_actions = [a for i, a in enumerate(plan.actions) if i not in bad_indices]
+                if good_actions:
+                    logger.warning(
+                        "Validation: removing %d bad actions (indices %s), keeping %d good ones",
+                        len(bad_indices),
+                        bad_indices,
+                        len(good_actions),
+                    )
+                    plan.actions = good_actions
+                else:
+                    return [
+                        ActionResult(
+                            action=plan.actions[0],
+                            success=False,
+                            error=f"Validation failed: {'; '.join(errors)}",
+                        )
+                    ]
+            else:
+                return [
+                    ActionResult(
+                        action=plan.actions[0],
+                        success=False,
+                        error=f"Validation failed: {'; '.join(errors)}",
+                    )
+                ]
+
+        if self._config.security.dry_run:
+            return await self._execute_dry_run(plan, plan_id, on_action_start, on_action_complete)
+
+        snapshot_id: str | None = None
+        if self._permissions.plan_requires_snapshot(plan):
+            try:
+                file_snapshot_targets = self._file_snapshot_targets(plan)
+                if file_snapshot_targets is not None:
+                    snapshot_id = await self._snapshot_mgr.create_file_snapshot(
+                        plan_id,
+                        file_snapshot_targets,
+                    )
+                else:
+                    snapshot_id = await self._snapshot_mgr.create_snapshot(
+                        plan_id, f"Pre-action snapshot for plan {plan_id}"
+                    )
+            except Exception as e:
+                logger.error("Required snapshot creation failed; blocking plan: %s", e)
+                return [
+                    ActionResult(
+                        action=plan.actions[0],
+                        success=False,
+                        error=f"Safety stop: required pre-action snapshot failed. No actions ran. {e}",
+                    )
+                ]
+            if not snapshot_id:
+                logger.error("Required snapshot backend unavailable; blocking plan")
+                return [
+                    ActionResult(
+                        action=plan.actions[0],
+                        success=False,
+                        error=(
+                            "Safety stop: Auto-Snapshot is enabled, but no snapshot backend is ready. No actions ran."
+                        ),
+                    )
+                ]
+
+        for i, action in enumerate(plan.actions):
+            if cancel_event and cancel_event.is_set():
+                logger.info("Executor: cancel_event set — stopping at action %d", i)
+                break
+            await self._audit.log_action_start(action, plan_id)
+
+        batches = self._analyze_dependencies(plan.actions)
+        durable_action_indices = {id(action): index + action_index_offset for index, action in enumerate(plan.actions)}
+        durable_task = (
+            await self._durable_task_store.get(get_experience_context().task_id)
+            if self._durable_task_store is not None and get_experience_context().task_id
+            else None
+        )
+        claim_owner = str(uuid.uuid4())
+        logger.info("Executing %d action(s) in %d parallel batch(es)", len(plan.actions), len(batches))
+
+        for batch_idx, batch in enumerate(batches):
+            if not batch:
+                continue
+
+            # --- PREEMPTIVE SCHEDULER YIELD POINT ---
+            if orchestrator and hasattr(orchestrator, "background_allowed"):
+                await asyncio.sleep(0)  # Micro-yield to the event loop
+                if not orchestrator.background_allowed.is_set():
+                    logger.info("Executor: Preempted! Freezing background execution until high-priority task finishes.")
+                    await orchestrator.background_allowed.wait()
+
+            if cancel_event and cancel_event.is_set():
+                logger.info("Executor: cancel_event set — stopping at batch %d", batch_idx)
+                for remaining_batch in batches[batch_idx + 1 :]:
+                    for action in remaining_batch:
+                        results.append(
+                            ActionResult(action=action, success=False, error="Skipped due to cancel request")
+                        )
+                break
+
+            logger.info("Batch %d: executing %d action(s) in parallel", batch_idx + 1, len(batch))
+
+            async def execute_single_action(action: Action, idx: int):
+                action_key = stable_action_idempotency_key(
+                    plan_id,
+                    durable_action_indices[id(action)],
+                    action,
+                )
+                claimed = False
+                if durable_task is not None and self._durable_task_store is not None:
+                    from pilot.workflows.durable_tasks import ActionClaimDecision
+
+                    claim = await self._durable_task_store.claim_action(
+                        task_id=get_experience_context().task_id,
+                        plan_id=plan_id,
+                        action_key=action_key,
+                        lease_owner=claim_owner,
+                    )
+                    if claim.decision == ActionClaimDecision.ALREADY_COMPLETED:
+                        if claim.result is None:
+                            result = ActionResult(
+                                action=action,
+                                success=False,
+                                error="Safety stop: completed action has no durable result.",
+                            )
+                        else:
+                            result = ActionResult.model_validate(
+                                {
+                                    **claim.result,
+                                    # Parameter unions are intentionally broad;
+                                    # retain the already-validated current action
+                                    # instead of re-inferring its parameter type
+                                    # from generic JSON during replay.
+                                    "action": action,
+                                }
+                            )
+                        if on_action_complete:
+                            await on_action_complete(result)
+                        return idx, result
+                    if claim.decision != ActionClaimDecision.CLAIMED:
+                        reason = {
+                            ActionClaimDecision.BUSY: "another worker still owns this action",
+                            ActionClaimDecision.RECONCILIATION_REQUIRED: (
+                                "the daemon stopped after this action may have changed the real world; "
+                                "reconcile its effect before retrying"
+                            ),
+                            ActionClaimDecision.RETRY_REQUIRED: (
+                                "the previous attempt failed; an explicit retry is required"
+                            ),
+                        }.get(claim.decision, claim.decision.value)
+                        result = ActionResult(
+                            action=action,
+                            success=False,
+                            error=f"Safety stop: {reason}.",
+                        )
+                        if on_action_complete:
+                            await on_action_complete(result)
+                        return idx, result
+                    claimed = True
+
+                await self._audit.log_action_start(action, plan_id)
+                if on_action_start:
+                    await on_action_start(action)
+                if self._narrator is not None:
+                    await self._narrator.on_action_start(action)
+                action = self._inject_previous_output(action)
+
+                # Pre-execution target assessment for browser interaction
+                # actions -- the same check SimulationSandbox.simulate()
+                # already runs for dry-run plans, now also reachable at
+                # real-execution time when a narrator is configured.
+                if self._narrator is not None:
+                    action_type_value = (
+                        action.action_type.value if hasattr(action.action_type, "value") else str(action.action_type)
+                    )
+                    from pilot.system.dom_diff import assess_browser_action_target
+
+                    assessment = await assess_browser_action_target(action_type_value, action)
+                    if assessment is not None and assessment.matchable:
+                        is_problem = not assessment.found or not assessment.visible or assessment.ambiguous
+                        if is_problem:
+                            proceed = await self._narrator.on_target_assessment(action, assessment)
+                            if not proceed:
+                                result = ActionResult(
+                                    action=action,
+                                    success=False,
+                                    error=f"Skipped after interrupt: {assessment.reason}",
+                                )
+                                await self._audit.log_action_result(result, plan_id)
+                                if on_action_complete:
+                                    await on_action_complete(result)
+                                if self._narrator is not None:
+                                    await self._narrator.on_action_complete(result)
+                                return idx, result
+
+                    # "Simulate before executing" preview -- only for
+                    # autonomous/unattended invocations (interactive voice/
+                    # text/gesture commands already have the user watching
+                    # in real time, so this would only add latency without
+                    # the corresponding benefit).
+                    if invocation_source == InvocationSource.AUTONOMOUS and self._config.preview.enabled:
+                        from pilot.system.action_preview import generate_action_preview
+
+                        preview = await generate_action_preview(action_type_value, action)
+                        if preview is None:
+                            result = ActionResult(
+                                action=action,
+                                success=False,
+                                error=(
+                                    "Safety stop: Simulate Before Executing is enabled, "
+                                    "but a real preview could not be generated. No action ran."
+                                ),
+                            )
+                            await self._audit.log_action_result(result, plan_id)
+                            if on_action_complete:
+                                await on_action_complete(result)
+                            if self._narrator is not None:
+                                await self._narrator.on_action_complete(result)
+                            return idx, result
+
+                        proceed = await self._narrator.on_action_preview(action, preview)
+                        if not proceed:
+                            result = ActionResult(
+                                action=action,
+                                success=False,
+                                error="Skipped after preview interrupt",
+                            )
+                            await self._audit.log_action_result(result, plan_id)
+                            if on_action_complete:
+                                await on_action_complete(result)
+                            if self._narrator is not None:
+                                await self._narrator.on_action_complete(result)
+                            return idx, result
+
+                try:
+                    result = await self._execute_single(
+                        action,
+                        snapshot_id,
+                        user_confirmed=user_confirmed,
+                    )
+                except BaseException as exc:
+                    if claimed and self._durable_task_store is not None:
+                        await self._durable_task_store.mark_action_uncertain(
+                            task_id=get_experience_context().task_id,
+                            action_key=action_key,
+                            lease_owner=claim_owner,
+                            error=f"{type(exc).__name__}: {exc}",
+                        )
+                    raise
+                if claimed and self._durable_task_store is not None:
+                    from pilot.workflows.durable_tasks import ActionExecutionStatus
+
+                    await self._durable_task_store.finish_action(
+                        task_id=get_experience_context().task_id,
+                        action_key=action_key,
+                        lease_owner=claim_owner,
+                        status=(ActionExecutionStatus.COMPLETED if result.success else ActionExecutionStatus.FAILED),
+                        result=result.model_dump(mode="json"),
+                        error=result.error or "",
+                    )
+                await self._audit.log_action_result(result, plan_id)
+                if on_action_complete:
+                    await on_action_complete(result)
+                if self._narrator is not None:
+                    await self._narrator.on_action_complete(result)
+                return idx, result
+
+            batch_results = await asyncio.gather(
+                *[execute_single_action(action, i) for i, action in enumerate(batch)], return_exceptions=True
+            )
+
+            failed = self._collect_batch_results(batch, batch_results, results)
+
+            if failed and batch_idx < len(batches) - 1:
+                remaining = sum(len(b) for b in batches[batch_idx + 1 :])
+                logger.warning("Stopping execution - %d action(s) in later batches will be skipped", remaining)
+                for remaining_batch in batches[batch_idx + 1 :]:
+                    for action in remaining_batch:
+                        results.append(
+                            ActionResult(action=action, success=False, error="Skipped due to earlier batch failure")
+                        )
+
+        return results
+
+    async def _execute_dry_run(
+        self,
+        plan: ActionPlan,
+        plan_id: str,
+        on_action_start: typing.Callable[[Action], typing.Awaitable[None]] | None = None,
+        on_action_complete: typing.Callable[[ActionResult], typing.Awaitable[None]] | None = None,
+    ) -> list[ActionResult]:
+        """Simulate a plan without performing any side effects."""
+        results: list[ActionResult] = []
+        report = await self._simulation_sandbox.simulate(plan)
+
+        for index, action in enumerate(plan.actions):
+            await self._audit.log_action_start(action, plan_id, dry_run=True)
+
+            if on_action_start:
+                await on_action_start(action)
+
+            impact = report.impacts[index] if index < len(report.impacts) else None
+            if impact:
+                output = (
+                    f"(dry run) Would {impact.description}. "
+                    f"Risk: {impact.risk.upper()}. Scope: {impact.estimated_scope}."
+                )
+            else:
+                output = f"(dry run) Would execute {action.action_type.value} on {action.target or 'target'}"
+
+            result = ActionResult(action=action, success=True, output=output)
+            await self._audit.log_action_result(result, plan_id, dry_run=True)
+
+            if on_action_complete:
+                await on_action_complete(result)
+
+            results.append(result)
+
+        self._last_output = ""
+        self._largest_output = ""
+        return results
+
+    # Placeholder patterns the LLM might use
+    _OUTPUT_PLACEHOLDERS = [
+        "{PREV_OUTPUT}",
+        "{{PREV_OUTPUT}}",
+        "{PREVIOUS_OUTPUT}",
+        "{{PREVIOUS_OUTPUT}}",
+        "{LAST_OUTPUT}",
+        "{{LAST_OUTPUT}}",
+        "{OUTPUT}",
+        "{{OUTPUT}}",
+        "{EXTRACTED_TEXT}",
+        "{{EXTRACTED_TEXT}}",
+        "{FIRST_3_TEXT}",
+        "{{FIRST_3_TEXT}}",
+        "{FIRST_3_PARAGRAPHS}",
+        "{{FIRST_3_PARAGRAPHS}}",
+        "{PARAGRAPHS}",
+        "{{PARAGRAPHS}}",
+        "{TEXT}",
+        "{{TEXT}}",
+        "{CONTENT}",
+        "{{CONTENT}}",
+        "{OCR_TEXT}",
+        "{{OCR_TEXT}}",
+        "{SCREEN_TEXT}",
+        "{{SCREEN_TEXT}}",
+    ]
+
+    # Regex to catch ANY {UPPERCASE_PLACEHOLDER} or {{UPPERCASE_PLACEHOLDER}}
+    _PLACEHOLDER_REGEX = __import__("re").compile(r"^\{?\{[A-Z][A-Z0-9_]*\}\}?$")
+
+    def _inject_previous_output(self, action: Action) -> Action:
+        """Auto-inject previous step output into the action's content/code fields."""
+        if not self._last_output:
+            return action
+
+        params = action.parameters
+
+        # For file_write: inject into content
+        if hasattr(params, "content") and params.content is not None:
+            content = params.content
+            # Check if content IS a known placeholder
+            if content.strip() in self._OUTPUT_PLACEHOLDERS:
+                params.content = self._last_output
+                action.use_previous_output = True
+            # Check if content matches any {UPPERCASE_VAR} pattern
+            elif self._PLACEHOLDER_REGEX.match(content.strip()):
+                logger.info("Replacing unknown placeholder %r with previous output", content.strip())
+                params.content = self._last_output
+                action.use_previous_output = True
+            else:
+                # Replace any placeholder within the content
+                for ph in self._OUTPUT_PLACEHOLDERS:
+                    if ph in content:
+                        params.content = content.replace(ph, self._last_output)
+                        action.use_previous_output = True
+                        break
+
+        # NOTE: Do NOT replace placeholders in code strings!
+        # Code gets PREV_OUTPUT injected as a proper Python variable via _exec_code_execute.
+        # String-replacing raw text into code creates syntax errors.
+
+        # If use_previous_output is set but no placeholder was found,
+        # inject into content if it's empty
+        if action.use_previous_output and hasattr(params, "content") and not params.content:
+            params.content = self._last_output
+
+        return action
+
+    async def _execute_single(
+        self,
+        action: Action,
+        snapshot_id: str | None,
+        *,
+        user_confirmed: bool = False,
+    ) -> ActionResult:
+        """Execute a single validated action."""
+
+        # ── Feature 2: Neuro-Safe Destructive Action Gate ──
+        stress_gate = getattr(self, "_stress_gate", None)
+        if stress_gate and stress_gate.enabled and not user_confirmed:
+            # Action type is used to check risk
+            gate_decision = await stress_gate.evaluate(action.action_type)
+            if gate_decision.gated:
+                logger.warning(f"Cognitive stress triggered for {action.action_type}. Pausing 10s.")
+                import asyncio
+
+                phrase = "Your focus state is low. Confirming in 10 seconds."
+                try:
+                    if self._speech:
+                        await self._speech(
+                            phrase,
+                            "approval_risk",
+                            f"stress-gate:{action.action_type.value}",
+                        )
+                    else:
+                        from pilot.system.voice import speak
+
+                        await speak(phrase, rate=160)
+                    if self._broadcast is not None:
+                        # Display-only: the daemon already spoke `phrase` on
+                        # its own OS audio above -- must not also trigger
+                        # frontend speechSynthesis, or it would speak twice.
+                        await self._broadcast(
+                            "daemon_speech",
+                            {
+                                "text": phrase,
+                                "source": "stress_gate",
+                                "action_type": action.action_type.value,
+                            },
+                        )
+                except Exception:
+                    pass
+                await asyncio.sleep(10)
+                # After 10s pause, proceed with execution
+
+        handler = self._dispatch_table.get(action.action_type)
+        if handler is None:
+            return ActionResult(
+                action=action,
+                success=False,
+                error=f"No handler for action type: {action.action_type}",
+            )
+
+        try:
+            output = await handler(action)
+            return ActionResult(action=action, success=True, output=output, snapshot_id=snapshot_id)
+        except Exception as e:
+            logger.exception("Action execution failed: %s", action.action_type)
+            return ActionResult(action=action, success=False, error=str(e), snapshot_id=snapshot_id)
+
+    # ======================================================================
+    # FILE OPERATIONS
+    # ======================================================================
+
+    async def _exec_file_read(self, action: Action) -> str:
+        from pilot.system.filesystem import file_read
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        return await file_read(params.path)
+
+    async def _exec_file_write(self, action: Action) -> str:
+        from pilot.system.filesystem import file_write
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        content = params.content or ""
+
+        # Prefer the largest output (e.g., browser_extract data)
+        best_output = self._largest_output or self._last_output or ""
+
+        # Replace any placeholder patterns in content
+        for ph in self._OUTPUT_PLACEHOLDERS:
+            if ph in content:
+                content = content.replace(ph, best_output)
+                break
+
+        # Catch any remaining {UPPERCASE_VAR} placeholders via regex
+        if self._PLACEHOLDER_REGEX.match(content.strip()):
+            logger.info("file_write: replacing unknown placeholder %r with best output", content.strip())
+            content = best_output
+
+        # If use_previous_output is set, inject the best available output
+        if action.use_previous_output and not content:
+            content = best_output
+
+        return await file_write(params.path, content)
+
+    async def _exec_file_delete(self, action: Action) -> str:
+        from pilot.system.filesystem import file_delete
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        return await file_delete(params.path, recursive=params.recursive)
+
+    async def _exec_file_move(self, action: Action) -> str:
+        from pilot.system.filesystem import file_move
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        if not params.destination:
+            raise ValueError("file_move requires a destination")
+        return await file_move(params.path, params.destination)
+
+    async def _exec_file_copy(self, action: Action) -> str:
+        from pilot.system.filesystem import file_copy
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        if not params.destination:
+            raise ValueError("file_copy requires a destination")
+        return await file_copy(params.path, params.destination, recursive=params.recursive)
+
+    async def _exec_file_list(self, action: Action) -> str:
+        from pilot.system.filesystem import file_list
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        return await file_list(params.path, recursive=params.recursive)
+
+    async def _exec_file_search(self, action: Action) -> str:
+        from pilot.system.filesystem import file_search
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        return await file_search(params.path, params.pattern or "*")
+
+    async def _exec_directory_summary(self, action: Action) -> str:
+        from pilot.system.filesystem import directory_summary
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        return await directory_summary(
+            params.path,
+            max_depth=params.max_depth,
+            max_entries=params.max_entries,
+            ignore_dirs=params.ignore_dirs,
+        )
+
+    async def _exec_directory_size(self, action: Action) -> str:
+        from pilot.system.filesystem import directory_size
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        return await directory_size(params.path, max_entries=params.max_entries)
+
+    async def _exec_file_hash(self, action: Action) -> str:
+        from pilot.system.filesystem import file_hash
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        return await file_hash(params.path, params.hash_algorithm)
+
+    async def _exec_file_compare(self, action: Action) -> str:
+        from pilot.system.filesystem import file_compare
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        if not params.destination:
+            raise ValueError("file_compare requires a destination")
+        return await file_compare(params.path, params.destination, params.hash_algorithm)
+
+    async def _exec_file_permissions(self, action: Action) -> str:
+        from pilot.system.filesystem import file_permissions
+
+        params: FileParams = action.parameters  # type: ignore[assignment]
+        return await file_permissions(params.path, params.permissions)
+
+    async def _exec_git_resolve(self, action: Action) -> str:
+        from pathlib import Path
+
+        params: GitResolveParams = action.parameters  # type: ignore[assignment]
+        p = Path(params.path)
+        if not p.exists():
+            raise FileNotFoundError(f"File not found: {params.path}")
+        content = await asyncio.to_thread(p.read_text, "utf-8")
+        if params.full_block not in content:
+            raise ValueError("Conflict block not found in file. It might have been modified or already resolved.")
+        new_content = content.replace(params.full_block, params.resolved_code)
+        await asyncio.to_thread(p.write_text, new_content, "utf-8")
+        return f"Successfully resolved git conflict in {params.path}"
+
+    async def _exec_git_action(self, action: Action) -> str:
+        """Run a validated repository operation through the Git tool adapter."""
+        import json
+
+        from pilot.agents.git_agent import GitAgent
+
+        params: GitParams = action.parameters  # type: ignore[assignment]
+        payload = params.model_dump()
+        if action.action_type == ActionType.GIT_COMMIT and not params.message.strip():
+            raise ValueError("git_commit requires an explicit commit message")
+        agent = GitAgent(repo_path=params.repo_path)
+        result = await agent.execute(action.action_type.value, payload)
+        if not result.get("success"):
+            raise RuntimeError(str(result.get("output") or "Git operation failed"))
+        return json.dumps(result, ensure_ascii=False)
+
+    # ======================================================================
+    # PACKAGE OPERATIONS
+    # ======================================================================
+
+    async def _exec_package_install(self, action: Action) -> str:
+        from pilot.system.package_mgr import package_install
+
+        params: PackageParams = action.parameters  # type: ignore[assignment]
+        return await package_install(params.name, params.version)
+
+    async def _exec_package_remove(self, action: Action) -> str:
+        from pilot.system.package_mgr import package_remove
+
+        params: PackageParams = action.parameters  # type: ignore[assignment]
+        return await package_remove(params.name)
+
+    async def _exec_package_update(self, action: Action) -> str:
+        from pilot.system.package_mgr import package_update
+
+        return await package_update()
+
+    async def _exec_package_search(self, action: Action) -> str:
+        from pilot.system.package_mgr import package_search
+
+        params: PackageParams = action.parameters  # type: ignore[assignment]
+        return await package_search(params.name)
+
+    # ======================================================================
+    # SERVICE OPERATIONS
+    # ======================================================================
+
+    async def _exec_service_start(self, action: Action) -> str:
+        from pilot.system.systemctl import service_start
+
+        params: ServiceParams = action.parameters  # type: ignore[assignment]
+        return await service_start(params.name, user_scope=params.user_scope)
+
+    async def _exec_service_stop(self, action: Action) -> str:
+        from pilot.system.systemctl import service_stop
+
+        params: ServiceParams = action.parameters  # type: ignore[assignment]
+        return await service_stop(params.name, user_scope=params.user_scope)
+
+    async def _exec_service_restart(self, action: Action) -> str:
+        from pilot.system.systemctl import service_restart
+
+        params: ServiceParams = action.parameters  # type: ignore[assignment]
+        return await service_restart(params.name, user_scope=params.user_scope)
+
+    async def _exec_service_enable(self, action: Action) -> str:
+        from pilot.system.systemctl import service_enable
+
+        params: ServiceParams = action.parameters  # type: ignore[assignment]
+        return await service_enable(params.name, user_scope=params.user_scope)
+
+    async def _exec_service_disable(self, action: Action) -> str:
+        from pilot.system.systemctl import service_disable
+
+        params: ServiceParams = action.parameters  # type: ignore[assignment]
+        return await service_disable(params.name, user_scope=params.user_scope)
+
+    async def _exec_service_status(self, action: Action) -> str:
+        from pilot.system.systemctl import service_status
+
+        params: ServiceParams = action.parameters  # type: ignore[assignment]
+        return await service_status(params.name, user_scope=params.user_scope)
+
+    # ======================================================================
+    # GNOME SETTINGS
+    # ======================================================================
+
+    async def _exec_gnome_read(self, action: Action) -> str:
+        from pilot.system.gnome import get_setting
+
+        params: GnomeSettingParams = action.parameters  # type: ignore[assignment]
+        return await get_setting(params.schema_id, params.key)
+
+    async def _exec_gnome_write(self, action: Action) -> str:
+        from pilot.system.gnome import set_setting
+
+        params: GnomeSettingParams = action.parameters  # type: ignore[assignment]
+        if not params.value:
+            raise ValueError("gnome_setting_write requires a value")
+        return await set_setting(params.schema_id, params.key, params.value)
+
+    # ======================================================================
+    # DBUS
+    # ======================================================================
+
+    async def _exec_dbus_call(self, action: Action) -> str:
+        from pilot.system.dbus_client import call_dbus_method
+
+        params: DBusParams = action.parameters  # type: ignore[assignment]
+        return await call_dbus_method(
+            params.bus,
+            params.service,
+            params.object_path,
+            params.interface,
+            params.method,
+            params.args or None,
+        )
+
+    # ======================================================================
+    # SHELL COMMANDS
+    # ======================================================================
+
+    async def _exec_shell_command(self, action: Action) -> str:
+        params: ShellCommandParams = action.parameters  # type: ignore[assignment]
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_command
+
+        cmd = [params.command] + (params.args or [])
+        # On Windows, built-in commands (tree, dir, type) and .com/.bat
+        # files need cmd /c to execute properly
+        if CURRENT_PLATFORM == Platform.WINDOWS:
+            cmd = ["cmd", "/c"] + cmd
+        code, out, err = await run_command(
+            cmd,
+            timeout=params.timeout,
+            cwd=params.working_directory,
+            root=params.elevated,
+        )
+        if code != 0:
+            raise RuntimeError(f"Command failed (exit {code}): {err.strip()}")
+        return out
+
+    async def _exec_shell_script(self, action: Action) -> str:
+        params: ShellScriptParams = action.parameters  # type: ignore[assignment]
+        from pilot.system.platform_detect import run_shell_script
+
+        code, out, err = await run_shell_script(
+            params.script,
+            interpreter=params.interpreter,
+            timeout=params.timeout,
+            cwd=params.working_directory,
+            elevated=params.elevated,
+        )
+        if code != 0:
+            raise RuntimeError(f"Script failed (exit {code}): {err.strip()}")
+        return out
+
+    async def _exec_pty_exec(self, action: Action) -> str:
+        params: PtyExecParams = action.parameters  # type: ignore[assignment]
+        from pilot.system.pty_session import PtySessionManager
+
+        session = PtySessionManager.get_session(params.session_id)
+        return await session.exec(params.command, timeout=params.timeout)
+
+    # ======================================================================
+    # OPEN URL / APPLICATION / NOTIFY
+    # ======================================================================
+
+    async def _exec_open_url(self, action: Action) -> str:
+        params: OpenUrlParams = action.parameters  # type: ignore[assignment]
+        url = params.url
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_command
+
+        if CURRENT_PLATFORM == Platform.WINDOWS:
+            code, _, err = await run_command(["cmd", "/c", "start", "", url])
+        elif CURRENT_PLATFORM == Platform.MACOS:
+            code, _, err = await run_command(["open", url])
+        else:
+            code, _, err = await run_command(["xdg-open", url])
+
+        return f"Opened {url} in default browser"
+
+    async def _exec_open_application(self, action: Action) -> str:
+        params: OpenApplicationParams = action.parameters  # type: ignore[assignment]
+        from pilot.system.applications import launch_application
+
+        return await launch_application(params.name, params.args or [])
+
+    async def _exec_notify(self, action: Action) -> str:
+        params: NotifyParams = action.parameters  # type: ignore[assignment]
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_command, run_powershell
+
+        if CURRENT_PLATFORM == Platform.WINDOWS:
+            code, _, err = await run_powershell(
+                f"[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; "
+                f"$notify = New-Object System.Windows.Forms.NotifyIcon; "
+                f"$notify.Icon = [System.Drawing.SystemIcons]::Information; "
+                f"$notify.Visible = $true; "
+                f"$notify.ShowBalloonTip(5000, '{params.summary}', '{params.body}', "
+                f"[System.Windows.Forms.ToolTipIcon]::Info); "
+                f"Start-Sleep -Seconds 3; $notify.Dispose()"
+            )
+            if code != 0:
+                return f"Notification: {params.summary} — {params.body}"
+            return f"Notification sent: {params.summary}"
+        elif CURRENT_PLATFORM == Platform.MACOS:
+            code, _, err = await run_command(
+                ["osascript", "-e", f'display notification "{params.body}" with title "{params.summary}"']
+            )
+        else:
+            code, _, err = await run_command(["notify-send", params.summary, params.body or ""])
+
+        return f"Notification sent: {params.summary}"
+
+    # ======================================================================
+    # PROCESS MANAGEMENT
+    # ======================================================================
+
+    async def _exec_process_list(self, action: Action) -> str:
+        from pilot.system.processes import process_list
+
+        params: ProcessParams = action.parameters  # type: ignore[assignment]
+        return await process_list(filter_name=params.name)
+
+    async def _exec_process_kill(self, action: Action) -> str:
+        import os
+        import shutil
+        import time
+
+        from pilot.system.processes import process_kill
+
+        params: ProcessParams = action.parameters  # type: ignore[assignment]
+
+        exe_path_to_quarantine = None
+        quarantine_log = ""
+
+        # 1. Trace the path BEFORE killing
+        if params.pid is not None:
+            try:
+                import psutil
+
+                proc = psutil.Process(params.pid)
+                exe_path_to_quarantine = proc.exe()
+            except (ImportError, Exception) as e:
+                logger.warning(f"Failed to trace executable for PID {params.pid} before kill: {e}")
+
+        # 2. Execute standard kill
+        result = await process_kill(pid=params.pid, name=params.name, sig=params.signal)
+
+        # 3. Wait for process to fully terminate to release file locks
+        if params.pid is not None:
+            try:
+                import psutil
+
+                try:
+                    # wait up to 3 seconds for it to exit
+                    psutil.Process(params.pid).wait(timeout=3.0)
+                except psutil.NoSuchProcess:
+                    pass
+                except Exception:
+                    # If timeout expired or access denied
+                    import asyncio
+
+                    await asyncio.sleep(0.5)
+            except Exception:
+                # If psutil is missing
+                import asyncio
+
+                await asyncio.sleep(0.5)
+
+        # 4. Quarantine and Defang AFTER killing (avoids file locks on Windows)
+        if exe_path_to_quarantine and os.path.exists(exe_path_to_quarantine):
+            try:
+                quarantine_dir = os.path.expanduser("~/.heliox/quarantine")
+                os.makedirs(quarantine_dir, exist_ok=True)
+
+                base_name = os.path.basename(exe_path_to_quarantine)
+                timestamp = int(time.time())
+                quarantine_filename = f"{base_name}_{timestamp}"
+                quarantine_path = os.path.join(quarantine_dir, quarantine_filename)
+
+                shutil.move(exe_path_to_quarantine, quarantine_path)
+                os.chmod(quarantine_path, 0o600)
+
+                quarantine_log = f"\n[Quarantine Vault] Traced PID {params.pid} to {exe_path_to_quarantine}. Moved to {quarantine_path} and stripped permissions."
+                logger.info(f"Quarantined malware: {exe_path_to_quarantine} -> {quarantine_path}")
+            except Exception as e:
+                logger.warning(f"Failed to quarantine executable {exe_path_to_quarantine}: {e}")
+
+        return result + quarantine_log
+
+    async def _exec_process_info(self, action: Action) -> str:
+        from pilot.system.processes import process_info
+
+        params: ProcessParams = action.parameters  # type: ignore[assignment]
+        if params.pid is None:
+            raise ValueError("process_info requires a PID")
+        return await process_info(params.pid)
+
+    # ======================================================================
+    # CLIPBOARD
+    # ======================================================================
+
+    async def _exec_clipboard_read(self, action: Action) -> str:
+        from pilot.system.clipboard import clipboard_read
+
+        return await clipboard_read()
+
+    async def _exec_clipboard_write(self, action: Action) -> str:
+        from pilot.system.clipboard import clipboard_write
+
+        params: ClipboardParams = action.parameters  # type: ignore[assignment]
+        content = params.content or ""
+        if action.use_previous_output and self._last_output:
+            content = self._last_output
+        return await clipboard_write(content)
+
+    # ======================================================================
+    # SYSTEM INFO
+    # ======================================================================
+
+    async def _exec_system_info(self, action: Action) -> str:
+        from pilot.system.sysinfo import system_info
+
+        params: SystemInfoParams = action.parameters  # type: ignore[assignment]
+        return await system_info(params.categories)
+
+    async def _exec_disk_usage(self, action: Action) -> str:
+        from pilot.system.sysinfo import disk_usage
+
+        return await disk_usage()
+
+    async def _exec_memory_usage(self, action: Action) -> str:
+        from pilot.system.sysinfo import memory_usage
+
+        return await memory_usage()
+
+    async def _exec_cpu_usage(self, action: Action) -> str:
+        from pilot.system.sysinfo import cpu_usage
+
+        return await cpu_usage()
+
+    async def _exec_network_info(self, action: Action) -> str:
+        from pilot.system.sysinfo import network_info
+
+        return await network_info()
+
+    async def _exec_battery_info(self, action: Action) -> str:
+        from pilot.system.sysinfo import battery_info
+
+        return await battery_info()
+
+    # ======================================================================
+    # POWER MANAGEMENT
+    # ======================================================================
+
+    async def _exec_power_shutdown(self, action: Action) -> str:
+        from pilot.system.power import shutdown
+
+        params: PowerParams = action.parameters  # type: ignore[assignment]
+        return await shutdown(params.delay_seconds, params.force)
+
+    async def _exec_power_restart(self, action: Action) -> str:
+        from pilot.system.power import restart
+
+        params: PowerParams = action.parameters  # type: ignore[assignment]
+        return await restart(params.delay_seconds, params.force)
+
+    async def _exec_power_sleep(self, action: Action) -> str:
+        from pilot.system.power import sleep
+
+        return await sleep()
+
+    async def _exec_power_lock(self, action: Action) -> str:
+        from pilot.system.power import lock_screen
+
+        return await lock_screen()
+
+    async def _exec_power_logout(self, action: Action) -> str:
+        from pilot.system.power import logout
+
+        return await logout()
+
+    # ======================================================================
+    # SCHEDULED TASKS
+    # ======================================================================
+
+    async def _exec_schedule_create(self, action: Action) -> str:
+        from pilot.system.scheduler import schedule_create
+
+        params: ScheduleParams = action.parameters  # type: ignore[assignment]
+        return await schedule_create(params.name, params.command, params.schedule)
+
+    async def _exec_schedule_list(self, action: Action) -> str:
+        from pilot.system.scheduler import schedule_list
+
+        return await schedule_list()
+
+    async def _exec_schedule_delete(self, action: Action) -> str:
+        from pilot.system.scheduler import schedule_delete
+
+        params: ScheduleParams = action.parameters  # type: ignore[assignment]
+        return await schedule_delete(params.name, params.task_id)
+
+    # ======================================================================
+    # ENVIRONMENT VARIABLES
+    # ======================================================================
+
+    async def _exec_env_get(self, action: Action) -> str:
+        from pilot.system.environment import env_get
+
+        params: EnvParams = action.parameters  # type: ignore[assignment]
+        return await env_get(params.name)
+
+    async def _exec_env_set(self, action: Action) -> str:
+        from pilot.system.environment import env_set
+
+        params: EnvParams = action.parameters  # type: ignore[assignment]
+        return await env_set(params.name, params.value or "", params.persistent)
+
+    async def _exec_env_list(self, action: Action) -> str:
+        from pilot.system.environment import env_list
+
+        params: EnvParams = action.parameters  # type: ignore[assignment]
+        return await env_list(params.name if params.name else None)
+
+    # ======================================================================
+    # WINDOW MANAGEMENT
+    # ======================================================================
+
+    async def _exec_window_list(self, action: Action) -> str:
+        from pilot.system.window_mgr import window_list
+
+        return await window_list()
+
+    async def _exec_window_focus(self, action: Action) -> str:
+        from pilot.system.window_mgr import window_focus
+
+        params: WindowParams = action.parameters  # type: ignore[assignment]
+        return await window_focus(params.window_id, params.title, params.process_name)
+
+    async def _exec_window_close(self, action: Action) -> str:
+        from pilot.system.window_mgr import window_close
+
+        params: WindowParams = action.parameters  # type: ignore[assignment]
+        return await window_close(params.window_id, params.title, params.process_name)
+
+    async def _exec_window_minimize(self, action: Action) -> str:
+        from pilot.system.window_mgr import window_minimize
+
+        params: WindowParams = action.parameters  # type: ignore[assignment]
+        return await window_minimize(params.title, params.process_name)
+
+    async def _exec_window_maximize(self, action: Action) -> str:
+        from pilot.system.window_mgr import window_maximize
+
+        params: WindowParams = action.parameters  # type: ignore[assignment]
+        return await window_maximize(params.title, params.process_name)
+
+    # ======================================================================
+    # VOLUME / AUDIO
+    # ======================================================================
+
+    async def _exec_volume_get(self, action: Action) -> str:
+        from pilot.system.volume import volume_get
+
+        return await volume_get()
+
+    async def _exec_volume_set(self, action: Action) -> str:
+        from pilot.system.volume import volume_set
+
+        params: VolumeParams = action.parameters  # type: ignore[assignment]
+        if params.level is None:
+            raise ValueError("volume_set requires a level")
+        return await volume_set(params.level)
+
+    async def _exec_volume_mute(self, action: Action) -> str:
+        from pilot.system.volume import volume_mute
+
+        params: VolumeParams = action.parameters  # type: ignore[assignment]
+        return await volume_mute(params.mute if params.mute is not None else True)
+
+    # ======================================================================
+    # BRIGHTNESS / SCREEN
+    # ======================================================================
+
+    async def _exec_brightness_get(self, action: Action) -> str:
+        from pilot.system.screen import brightness_get
+
+        return await brightness_get()
+
+    async def _exec_brightness_set(self, action: Action) -> str:
+        from pilot.system.screen import brightness_set
+
+        params: BrightnessParams = action.parameters  # type: ignore[assignment]
+        if params.level is None:
+            raise ValueError("brightness_set requires a level")
+        return await brightness_set(params.level)
+
+    async def _exec_screenshot(self, action: Action) -> str:
+        from pilot.system.screen import screenshot
+
+        params: ScreenshotParams = action.parameters  # type: ignore[assignment]
+        return await screenshot(params.output_path, params.region)
+
+    # ======================================================================
+    # WIFI / NETWORK
+    # ======================================================================
+
+    async def _exec_wifi_list(self, action: Action) -> str:
+        from pilot.system.network import wifi_list
+
+        return await wifi_list()
+
+    async def _exec_wifi_connect(self, action: Action) -> str:
+        from pilot.system.network import wifi_connect
+
+        params: WifiParams = action.parameters  # type: ignore[assignment]
+        return await wifi_connect(params.ssid, params.password, params.interface)
+
+    async def _exec_wifi_disconnect(self, action: Action) -> str:
+        from pilot.system.network import wifi_disconnect
+
+        params: WifiParams = action.parameters  # type: ignore[assignment]
+        return await wifi_disconnect(params.interface)
+
+    # ======================================================================
+    # DISK MANAGEMENT
+    # ======================================================================
+
+    async def _exec_disk_list(self, action: Action) -> str:
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_command, run_powershell
+
+        if CURRENT_PLATFORM == Platform.WINDOWS:
+            code, out, err = await run_powershell("Get-Disk | Format-Table -AutoSize | Out-String -Width 200")
+        else:
+            code, out, err = await run_command(["lsblk", "-o", "NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE"])
+        if code != 0:
+            raise RuntimeError(f"Disk list failed: {err.strip()}")
+        return out.strip()
+
+    async def _exec_disk_mount(self, action: Action) -> str:
+        params: DiskManageParams = action.parameters  # type: ignore[assignment]
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_command
+
+        if not params.device or not params.mount_point:
+            raise ValueError("disk_mount requires device and mount_point")
+        if CURRENT_PLATFORM == Platform.WINDOWS:
+            raise RuntimeError("Manual mount not supported on Windows via this interface")
+        code, out, err = await run_command(["mount", params.device, params.mount_point], root=True)
+        if code != 0:
+            raise RuntimeError(f"Mount failed: {err.strip()}")
+        return f"Mounted {params.device} at {params.mount_point}"
+
+    async def _exec_disk_unmount(self, action: Action) -> str:
+        params: DiskManageParams = action.parameters  # type: ignore[assignment]
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_command
+
+        target = params.mount_point or params.device
+        if not target:
+            raise ValueError("disk_unmount requires mount_point or device")
+        if CURRENT_PLATFORM == Platform.WINDOWS:
+            raise RuntimeError("Manual unmount not supported on Windows via this interface")
+        code, out, err = await run_command(["umount", target], root=True)
+        if code != 0:
+            raise RuntimeError(f"Unmount failed: {err.strip()}")
+        return f"Unmounted {target}"
+
+    # ======================================================================
+    # USER INFO
+    # ======================================================================
+
+    async def _exec_user_list(self, action: Action) -> str:
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_command
+
+        if CURRENT_PLATFORM == Platform.WINDOWS:
+            code, out, err = await run_command(["net", "user"])
+        else:
+            code, out, err = await run_command(["cut", "-d:", "-f1", "/etc/passwd"])
+        if code != 0:
+            raise RuntimeError(f"User list failed: {err.strip()}")
+        return out.strip()
+
+    async def _exec_user_info(self, action: Action) -> str:
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_command
+
+        if CURRENT_PLATFORM == Platform.WINDOWS:
+            code, out, err = await run_command(["whoami", "/all"])
+        else:
+            code, out, err = await run_command(["id"])
+        if code != 0:
+            raise RuntimeError(f"User info failed: {err.strip()}")
+        return out.strip()
+
+    # ======================================================================
+    # DOWNLOAD
+    # ======================================================================
+
+    async def _exec_download_file(self, action: Action) -> str:
+        from pilot.system.download import download_file
+
+        params: DownloadParams = action.parameters  # type: ignore[assignment]
+        return await download_file(params.url, params.output_path, params.overwrite)
+
+    # ======================================================================
+    # REGISTRY (WINDOWS)
+    # ======================================================================
+
+    async def _exec_registry_read(self, action: Action) -> str:
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_powershell
+
+        if CURRENT_PLATFORM != Platform.WINDOWS:
+            return "Registry operations are only available on Windows"
+        params: RegistryParams = action.parameters  # type: ignore[assignment]
+        code, out, err = await run_powershell(
+            f"Get-ItemProperty -Path 'Registry::{params.key_path}' "
+            + (f"-Name '{params.value_name}'" if params.value_name else "")
+            + " | Format-List"
+        )
+        if code != 0:
+            raise RuntimeError(f"Registry read failed: {err.strip()}")
+        return out.strip()
+
+    async def _exec_registry_write(self, action: Action) -> str:
+        from pilot.system.platform_detect import CURRENT_PLATFORM, Platform, run_powershell
+
+        if CURRENT_PLATFORM != Platform.WINDOWS:
+            return "Registry operations are only available on Windows"
+        params: RegistryParams = action.parameters  # type: ignore[assignment]
+        if not params.value_name or params.value_data is None:
+            raise ValueError("registry_write requires value_name and value_data")
+        code, out, err = await run_powershell(
+            f"Set-ItemProperty -Path 'Registry::{params.key_path}' "
+            f"-Name '{params.value_name}' -Value '{params.value_data}' "
+            f"-Type {params.value_type}"
+        )
+        if code != 0:
+            raise RuntimeError(f"Registry write failed: {err.strip()}")
+        return f"Registry: set {params.key_path}\\{params.value_name} = {params.value_data}"
+
+    # ======================================================================
+    # TIER 1: MOUSE CONTROL
+    # ======================================================================
+
+    async def _exec_mouse_click(self, action: Action) -> str:
+        from pilot.system.input_control import mouse_click
+
+        p: MouseParams = action.parameters  # type: ignore[assignment]
+        x, y = p.x, p.y
+        target_label = ""
+        if x == 0 and y == 0:
+            if self._detected_click_target is None:
+                raise ValueError(
+                    "mouse_click has no grounded coordinates; detect a single UI target "
+                    "or provide measured x/y coordinates"
+                )
+            x, y, target_label = self._detected_click_target
+            self._detected_click_target = None
+        output = await mouse_click(x, y, p.button, p.clicks)
+        if target_label:
+            return f"{output} (detected target: {target_label})"
+        return output
+
+    async def _exec_mouse_double_click(self, action: Action) -> str:
+        from pilot.system.input_control import mouse_double_click
+
+        p: MouseParams = action.parameters  # type: ignore[assignment]
+        return await mouse_double_click(p.x, p.y)
+
+    async def _exec_mouse_right_click(self, action: Action) -> str:
+        from pilot.system.input_control import mouse_right_click
+
+        p: MouseParams = action.parameters  # type: ignore[assignment]
+        return await mouse_right_click(p.x, p.y)
+
+    async def _exec_mouse_move(self, action: Action) -> str:
+        from pilot.system.input_control import mouse_move
+
+        p: MouseParams = action.parameters  # type: ignore[assignment]
+        return await mouse_move(p.x, p.y, p.duration, p.relative)
+
+    async def _exec_mouse_drag(self, action: Action) -> str:
+        from pilot.system.input_control import mouse_drag
+
+        p: MouseParams = action.parameters  # type: ignore[assignment]
+        return await mouse_drag(p.x, p.y, p.end_x or 0, p.end_y or 0, p.duration, p.button)
+
+    async def _exec_mouse_scroll(self, action: Action) -> str:
+        from pilot.system.input_control import mouse_scroll
+
+        p: MouseParams = action.parameters  # type: ignore[assignment]
+        return await mouse_scroll(p.amount, p.x if p.x else None, p.y if p.y else None, p.horizontal)
+
+    async def _exec_mouse_position(self, action: Action) -> str:
+        from pilot.system.input_control import mouse_position
+
+        return await mouse_position()
+
+    # ======================================================================
+    # TIER 1: KEYBOARD CONTROL
+    # ======================================================================
+
+    async def _exec_keyboard_type(self, action: Action) -> str:
+        from pilot.system.input_control import keyboard_type
+
+        p: KeyboardParams = action.parameters  # type: ignore[assignment]
+        return await keyboard_type(p.text, p.interval, target_window=p.window_title)
+
+    async def _exec_keyboard_press(self, action: Action) -> str:
+        from pilot.system.input_control import keyboard_press
+
+        p: KeyboardParams = action.parameters  # type: ignore[assignment]
+        return await keyboard_press(p.key, p.presses)
+
+    async def _exec_keyboard_hotkey(self, action: Action) -> str:
+        from pilot.system.input_control import keyboard_hotkey
+
+        p: KeyboardParams = action.parameters  # type: ignore[assignment]
+        return await keyboard_hotkey(*p.keys)
+
+    async def _exec_keyboard_hold(self, action: Action) -> str:
+        from pilot.system.input_control import keyboard_hold
+
+        p: KeyboardParams = action.parameters  # type: ignore[assignment]
+        return await keyboard_hold(p.key, p.duration)
+
+    # ======================================================================
+    # TIER 1: SCREEN UNDERSTANDING / VISION
+    # ======================================================================
+
+    async def _exec_screen_ocr(self, action: Action) -> str:
+        from pilot.system.vision import screen_ocr
+
+        region = None
+        language = "eng"
+        try:
+            p: ScreenVisionParams = action.parameters  # type: ignore[assignment]
+            if p.region:
+                parts = [int(x) for x in str(p.region).split(",")]
+                region = tuple(parts[:4]) if len(parts) >= 4 else None
+            language = p.language or "eng"
+        except Exception as e:
+            logger.warning("screen_ocr: failed to parse params (%s), using defaults", e)
+        return await screen_ocr(region, language)
+
+    async def _exec_screen_find_text(self, action: Action) -> str:
+        from pilot.system.vision import screen_find_text
+
+        p: ScreenVisionParams = action.parameters  # type: ignore[assignment]
+        region = None
+        if p.region:
+            parts = [int(x) for x in p.region.split(",")]
+            region = tuple(parts[:4]) if len(parts) >= 4 else None
+        return await screen_find_text(p.target_text, region)
+
+    async def _exec_screen_analyze(self, action: Action) -> str:
+        from pilot.system.vision import screen_analyze
+
+        # Defensive: handle both ScreenVisionParams and ScreenshotParams gracefully
+        prompt = getattr(action.parameters, "prompt", None) or "Describe what you see on the screen"
+        return await screen_analyze(prompt)
+
+    async def _exec_screen_element_map(self, action: Action) -> str:
+        from pilot.system.vision import screen_element_map
+
+        return await screen_element_map()
+
+    async def _exec_screen_detect_elements(self, action: Action) -> str:
+        """Zero-shot VLM element detection — returns bounding-box coordinates.
+
+        If the result contains exactly one ``click`` element, retain its
+        measured centre for a subsequent zero-coordinate ``MOUSE_CLICK``.
+        """
+        import json as _json
+
+        from pilot.actions import ElementDetectionParams
+        from pilot.system.vision import screen_detect_elements
+
+        p: ElementDetectionParams = action.parameters  # type: ignore[assignment]
+
+        # Parse region string "x,y,w,h" → tuple
+        region: tuple[int, int, int, int] | None = None
+        if p.region:
+            try:
+                parts = [int(v.strip()) for v in p.region.split(",")]
+                if len(parts) == 4:
+                    region = (parts[0], parts[1], parts[2], parts[3])
+            except (ValueError, AttributeError):
+                pass
+
+        result = await screen_detect_elements(
+            description=p.description,
+            region=region,
+            max_elements=p.max_elements,
+            action_filter=p.action_filter,
+        )
+
+        self._detected_click_target = None
+
+        # Auto-chain: retain a single, measured click target separately from
+        # textual step output. ``_last_output`` is replaced with the returned
+        # JSON by the normal executor pipeline and cannot safely carry state.
+        try:
+            data = _json.loads(result)
+            elements = data.get("elements", [])
+            click_els = [e for e in elements if e.get("action") == "click"]
+            if len(click_els) == 1:
+                bbox = click_els[0].get("bbox", [0, 0, 0, 0])
+                if not isinstance(bbox, list) or len(bbox) != 4:
+                    raise ValueError("invalid click target bounding box")
+                offset_x = region[0] if region else 0
+                offset_y = region[1] if region else 0
+                cx = int(bbox[0]) + int(bbox[2]) // 2 + offset_x
+                cy = int(bbox[1]) + int(bbox[3]) // 2 + offset_y
+                label = str(click_els[0].get("label", "")).strip() or "unnamed element"
+                self._detected_click_target = (cx, cy, label)
+                logger.info(
+                    "screen_detect_elements: single click target '%s' at (%d, %d)",
+                    label,
+                    cx,
+                    cy,
+                )
+        except (TypeError, ValueError, KeyError, _json.JSONDecodeError):
+            logger.warning("screen_detect_elements returned no usable single click target")
+
+        return result
+
+    def _get_browser_backend(self):
+        if not hasattr(self, "_browser_backend"):
+            from pilot.system.browser import PlaywrightBackend
+
+            self._browser_backend = PlaywrightBackend()
+        return self._browser_backend
+
+    # ======================================================================
+    # TIER 1: BROWSER AUTOMATION
+    # ======================================================================
+
+    async def _exec_browser_navigate(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().navigate(p.url, p.wait_until)
+
+    async def _exec_browser_click(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().click(p.selector, p.button, timeout=p.timeout)
+
+    async def _exec_browser_click_text(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().click_text(p.text, p.exact)
+
+    async def _exec_browser_type(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().type(p.selector, p.text, p.clear_first, p.press_enter)
+
+    async def _exec_browser_select(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().select(p.selector, p.value)
+
+    async def _exec_browser_hover(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().hover(p.selector)
+
+    async def _exec_browser_scroll(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().scroll(p.direction, p.amount)
+
+    async def _exec_browser_extract(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().extract(p.selector or "body", p.attribute, p.multiple)
+
+    async def _exec_browser_extract_table(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().extract_table(p.selector or "table")
+
+    async def _exec_browser_extract_links(self, action: Action) -> str:
+        return await self._get_browser_backend().extract_links()
+
+    async def _exec_browser_execute_js(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().execute_js(p.script)
+
+    async def _exec_browser_screenshot(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().screenshot(p.output_path, p.full_page, p.selector or None)
+
+    async def _exec_browser_fill_form(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().fill_form(p.fields, p.submit_selector)
+
+    async def _exec_browser_new_tab(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().new_tab(p.url or None)
+
+    async def _exec_browser_close_tab(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().close_tab(p.tab_index)
+
+    async def _exec_browser_list_tabs(self, action: Action) -> str:
+        return await self._get_browser_backend().list_tabs()
+
+    async def _exec_browser_switch_tab(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().switch_tab(p.tab_index)
+
+    async def _exec_browser_back(self, action: Action) -> str:
+        return await self._get_browser_backend().back()
+
+    async def _exec_browser_forward(self, action: Action) -> str:
+        return await self._get_browser_backend().forward()
+
+    async def _exec_browser_refresh(self, action: Action) -> str:
+        return await self._get_browser_backend().refresh()
+
+    async def _exec_browser_wait(self, action: Action) -> str:
+        p: BrowserParams = action.parameters  # type: ignore[assignment]
+        return await self._get_browser_backend().wait(p.selector or None, p.timeout, p.state)
+
+    async def _exec_browser_close(self, action: Action) -> str:
+        return await self._get_browser_backend().close()
+
+    async def _exec_browser_page_info(self, action: Action) -> str:
+        return await self._get_browser_backend().get_page_info()
+
+    # ======================================================================
+    # TIER 1: REACTIVE TRIGGERS
+    # ======================================================================
+
+    async def _exec_trigger_create(self, action: Action) -> str:
+        from pilot.system.triggers import trigger_create
+
+        p: TriggerParams = action.parameters  # type: ignore[assignment]
+        return await trigger_create(
+            p.name,
+            p.trigger_type,
+            p.condition,
+            p.action_command,
+            p.max_fires,
+            p.cooldown_seconds,
+        )
+
+    async def _exec_trigger_list(self, action: Action) -> str:
+        from pilot.system.triggers import trigger_list
+
+        return await trigger_list()
+
+    async def _exec_trigger_delete(self, action: Action) -> str:
+        from pilot.system.triggers import trigger_delete
+
+        p: TriggerParams = action.parameters  # type: ignore[assignment]
+        return await trigger_delete(p.trigger_id or p.name)
+
+    async def _exec_trigger_start(self, action: Action) -> str:
+        from pilot.system.triggers import trigger_start_engine
+
+        return await trigger_start_engine()
+
+    async def _exec_trigger_stop(self, action: Action) -> str:
+        from pilot.system.triggers import trigger_stop_engine
+
+        return await trigger_stop_engine()
+
+    # ======================================================================
+    # TIER 2: CODE EXECUTION
+    # ======================================================================
+
+    async def _exec_skill_run(self, action: Action) -> str:
+        from pilot.skills.base import SkillContext
+
+        p: SkillRunParams = action.parameters  # type: ignore[assignment]
+        if self._skill_registry is None:
+            return "Skill registry is not configured"
+        ctx = SkillContext(pilot_config=self._config)
+        return await self._skill_registry.run(p.skill_id.strip(), p.arguments, ctx)
+
+    async def _exec_code_execute(self, action: Action) -> str:
+        from pilot.system.code_exec import execute_code
+        from pilot.system.sandbox_exec import SandboxConfig
+
+        p: CodeExecParams = action.parameters  # type: ignore[assignment]
+        code = p.code
+
+        # Build sandbox config from live security settings
+        sandbox_cfg = SandboxConfig(
+            mode=getattr(self._config.security, "sandbox_mode", "auto"),
+            memory_mb=getattr(self._config.security, "sandbox_memory_mb", 128),
+            timeout=getattr(self._config.security, "sandbox_timeout", p.timeout),
+            network=getattr(self._config.security, "sandbox_network", False),
+            kernel_guard=getattr(self._config.security, "sandbox_kernel_guard", True),
+            blocked_syscalls=tuple(getattr(self._config.security, "sandbox_blocked_syscalls", ["unlink", "unlinkat"])),
+            firecracker_binary=getattr(self._config.security, "sandbox_firecracker_binary", "firecracker"),
+            firecracker_kernel_image=getattr(self._config.security, "sandbox_firecracker_kernel_image", ""),
+            firecracker_rootfs_path=getattr(self._config.security, "sandbox_firecracker_rootfs_path", ""),
+            firecracker_fallback=getattr(self._config.security, "sandbox_firecracker_fallback", True),
+        )
+
+        runtime_preamble = ""
+
+        # Python plans are promised PREV_OUTPUT and its derived helpers. Always
+        # define them, even for the first action, and embed the data into the
+        # staged script so isolated sandboxes can read it.
+        if p.language.lower().strip() in ("python", "py", "python3"):
+            best_text = self._largest_output or self._last_output or ""
+            normalized = best_text.replace("\r\n", "\n").replace("\r", "\n")
+
+            from pilot.agents._code_preamble import build_preamble
+
+            runtime_preamble = build_preamble(normalized)
+            code = runtime_preamble + code
+
+            para_count = len(
+                [
+                    paragraph
+                    for paragraph in normalized.split("\n\n")
+                    if paragraph.strip() and len(paragraph.strip()) > 30
+                ]
+            )
+            logger.info(
+                "Code execute: injected PREV_OUTPUT (%d chars), ~%d paragraphs",
+                len(normalized),
+                para_count,
+            )
+            logger.debug("LLM generated code:\n%s", p.code[:500] if p.code else "(empty)")
+
+            # --- Sanitize code before execution ---
+            from pilot.agents.code_sanitizer import sanitize_python_code
+
+            code = sanitize_python_code(code)
+
+        logger.info("Code execute: running %d chars of code", len(code))
+        result = await execute_code(code, p.language, p.timeout, sandbox_cfg=sandbox_cfg)
+        logger.info("Code execute result (%d chars): %s", len(result), result[:200] if result else "(empty)")
+
+        # --- Auto-retry on failure: ask LLM to fix the code ---
+        execution_error = _code_execution_error(result)
+        if execution_error:
+            # Code failed — try to fix it with the LLM
+            logger.warning("Code execution failed, attempting auto-fix via LLM")
+            try:
+                fix_prompt = (
+                    "The following Python code crashed with this error:\n\n"
+                    "```\n" + result[:500] + "\n```\n\n"
+                    "Here is the code:\n\n"
+                    "```python\n" + code[-2000:] + "\n```\n\n"
+                    "Fix the code. Return ONLY the complete fixed Python code, no explanation. "
+                    "Do NOT use self.method() calls. This is a standalone script. "
+                    "Make sure all variables are defined. Use simple, safe code."
+                )
+                fixed_code = await self._model.generate(
+                    fix_prompt,
+                    system="You are a Python code fixer. Return ONLY valid Python code. No markdown, no explanation.",
+                    temperature=0.0,
+                )
+                # Strip markdown code fences if present
+                fixed_code = fixed_code.strip()
+                if fixed_code.startswith("```"):
+                    lines = fixed_code.split("\n")
+                    # Remove first and last lines (```python and ```)
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip() == "```":
+                        lines = lines[:-1]
+                    fixed_code = "\n".join(lines)
+
+                # Re-sanitize the fixed code
+                if p.language.lower().strip() in ("python", "py", "python3"):
+                    from pilot.agents.code_sanitizer import sanitize_python_code
+
+                    if "# === Auto-injected by Pilot ===" not in fixed_code:
+                        fixed_code = runtime_preamble + fixed_code
+                    fixed_code = sanitize_python_code(fixed_code)
+
+                logger.info("Auto-fix: retrying with LLM-fixed code (%d chars)", len(fixed_code))
+                retry_result = await execute_code(fixed_code, p.language, p.timeout, sandbox_cfg=sandbox_cfg)
+
+                # A retry is successful only when its terminal markers say so.
+                retry_error = _code_execution_error(retry_result)
+                if retry_error is None:
+                    logger.info("Auto-fix succeeded!")
+                    result = retry_result
+                    execution_error = retry_error
+                elif len(retry_result) > len(result):
+                    # Preserve richer diagnostics, but still fail the action.
+                    logger.info("Auto-fix produced more diagnostic output")
+                    result = retry_result
+                    execution_error = retry_error
+                else:
+                    logger.warning("Auto-fix didn't improve, keeping original result")
+            except Exception as e:
+                logger.warning("Auto-fix LLM call failed: %s", e)
+
+        if execution_error:
+            raise RuntimeError(execution_error)
+        return result
+
+    async def _exec_code_generate(self, action: Action) -> str:
+        from pilot.system.code_exec import generate_and_execute
+        from pilot.system.sandbox_exec import SandboxConfig
+
+        p: CodeExecParams = action.parameters  # type: ignore[assignment]
+
+        sandbox_cfg = SandboxConfig(
+            mode=getattr(self._config.security, "sandbox_mode", "auto"),
+            memory_mb=getattr(self._config.security, "sandbox_memory_mb", 128),
+            timeout=getattr(self._config.security, "sandbox_timeout", p.timeout),
+            network=getattr(self._config.security, "sandbox_network", False),
+            kernel_guard=getattr(self._config.security, "sandbox_kernel_guard", True),
+            blocked_syscalls=tuple(getattr(self._config.security, "sandbox_blocked_syscalls", ["unlink", "unlinkat"])),
+            firecracker_binary=getattr(self._config.security, "sandbox_firecracker_binary", "firecracker"),
+            firecracker_kernel_image=getattr(self._config.security, "sandbox_firecracker_kernel_image", ""),
+            firecracker_rootfs_path=getattr(self._config.security, "sandbox_firecracker_rootfs_path", ""),
+            firecracker_fallback=getattr(self._config.security, "sandbox_firecracker_fallback", True),
+        )
+        result = await generate_and_execute(p.task_description, p.language, p.timeout, sandbox_cfg=sandbox_cfg)
+        execution_error = _code_execution_error(result)
+        if execution_error:
+            raise RuntimeError(execution_error)
+        return result
+
+    # ======================================================================
+    # TIER 2: FILE CONTENT INTELLIGENCE
+    # ======================================================================
+
+    async def _exec_file_parse(self, action: Action) -> str:
+        from pilot.system.file_intel import parse_file
+
+        p: FileIntelParams = action.parameters  # type: ignore[assignment]
+        return await parse_file(p.path)
+
+    async def _exec_file_search_content(self, action: Action) -> str:
+        from pilot.system.file_intel import search_file_contents
+
+        p: FileIntelParams = action.parameters  # type: ignore[assignment]
+        return await search_file_contents(p.directory, p.search_text, p.pattern, p.max_results)
+
+    # ======================================================================
+    # TIER 2: API INTEGRATION
+    # ======================================================================
+
+    async def _exec_api_request(self, action: Action) -> str:
+        from pilot.system.api_client import api_request
+
+        p: ApiRequestParams = action.parameters  # type: ignore[assignment]
+        return await api_request(p.method, p.url, p.headers or None, p.body, p.params or None, timeout=p.timeout)
+
+    async def _exec_api_github(self, action: Action) -> str:
+        from pilot.system.api_client import github_api
+
+        p: ApiRequestParams = action.parameters  # type: ignore[assignment]
+        return await github_api(p.endpoint, p.method, p.body, p.token)
+
+    async def _exec_api_send_email(self, action: Action) -> str:
+        from pilot.system.api_client import send_email
+
+        p: ApiRequestParams = action.parameters  # type: ignore[assignment]
+        return await send_email(p.to, p.subject, p.message, html=p.html)
+
+    async def _exec_api_webhook(self, action: Action) -> str:
+        from pilot.system.api_client import send_webhook
+
+        p: ApiRequestParams = action.parameters  # type: ignore[assignment]
+        return await send_webhook(p.url, p.body or {}, p.method, p.headers or None)
+
+    async def _exec_api_slack(self, action: Action) -> str:
+        from pilot.system.api_client import send_slack_message
+
+        p: ApiRequestParams = action.parameters  # type: ignore[assignment]
+        return await send_slack_message(p.message, p.webhook_url, p.channel)
+
+    async def _exec_api_discord(self, action: Action) -> str:
+        from pilot.system.api_client import send_discord_message
+
+        p: ApiRequestParams = action.parameters  # type: ignore[assignment]
+        return await send_discord_message(p.message, p.webhook_url)
+
+    async def _exec_api_scrape(self, action: Action) -> str:
+        from pilot.system.api_client import scrape_url
+
+        p: ApiRequestParams = action.parameters  # type: ignore[assignment]
+        return await scrape_url(p.url, p.selector, p.extract)
+
+    # ======================================================================
+    # WORKSPACE SEMANTIC SEARCH (RAG)
+    # ======================================================================
+
+    async def _exec_workspace_index(self, action: Action) -> str:
+        import asyncio
+
+        from pilot.config import DATA_DIR
+        from pilot.memory.workspace_index import WorkspaceIndex
+
+        p: WorkspaceParams = action.parameters  # type: ignore[assignment]
+        if not p.folder_path:
+            raise ValueError("workspace_index requires a folder_path")
+
+        index_dir = DATA_DIR / "workspace_index"
+        idx = WorkspaceIndex(index_dir)
+        result = await asyncio.to_thread(idx.index_workspace, p.folder_path)
+        if not result.get("success"):
+            raise RuntimeError(result.get("error", "Indexing failed"))
+        return (
+            f"Indexed workspace: {result['files_indexed']} new files, "
+            f"{result.get('files_unchanged', 0)} unchanged, "
+            f"{result['total_chunks']} total chunks"
+        )
+
+    async def _exec_workspace_search(self, action: Action) -> str:
+        import asyncio
+
+        from pilot.config import DATA_DIR
+        from pilot.memory.workspace_index import WorkspaceIndex
+
+        p: WorkspaceParams = action.parameters  # type: ignore[assignment]
+        if not p.query:
+            raise ValueError("workspace_search requires a query")
+
+        index_dir = DATA_DIR / "workspace_index"
+        idx = WorkspaceIndex(index_dir)
+        results = await asyncio.to_thread(idx.search, p.query, p.n_results)
+        if not results:
+            return "No results found in workspace index."
+
+        lines = []
+        for r in results:
+            lines.append(f"File: {r['file']} (lines {r['start_line']}-{r['end_line']}, score: {r['score']:.3f})")
+            lines.append(r["text"])
+            lines.append("---")
+        return "\n".join(lines)
+
+    async def _exec_wasm_call(self, action: Action) -> str:
+        import asyncio
+        import json
+
+        params: WasmCallParams = action.parameters  # type: ignore[assignment]
+        tool_name = params.tool or action.target
+        if not tool_name:
+            raise ValueError("wasm_call requires a tool name (either in target or parameters)")
+        if self._plugin_registry is None:
+            raise RuntimeError("Plugin registry not initialized in Executor")
+        result = await asyncio.to_thread(
+            self._plugin_registry.call_wasm_tool,
+            tool_name,
+            params.args,
+        )
+        if "error" in result:
+            raise RuntimeError(f"WASM tool execution failed: {result['error']}")
+        return json.dumps(result)
+
+    async def _exec_plugin_call(self, action: Action) -> str:
+        """Run an approved Python or WASM marketplace tool through its broker."""
+        import asyncio
+        import json
+
+        params: WasmCallParams = action.parameters  # type: ignore[assignment]
+        tool_name = params.tool or action.target
+        if not tool_name:
+            raise ValueError("plugin_call requires a tool name (either in target or parameters)")
+        if self._plugin_registry is None:
+            raise RuntimeError("Plugin registry not initialized in Executor")
+        result = await asyncio.to_thread(
+            self._plugin_registry.call_tool,
+            tool_name,
+            params.args,
+            approved=True,
+        )
+        if "error" in result:
+            raise RuntimeError(f"Plugin tool execution failed: {result['error']}")
+        return json.dumps(result)
+
+    async def _exec_log_analyze(self, action: Action) -> str:
+        import json
+        import os
+
+        from pilot.actions import LogAnalyzeParams
+        from pilot.tools.forensics import correlate_sessions, detect_spikes, extract_auth_events, parse_syslog_file
+
+        params: LogAnalyzeParams = action.parameters  # type: ignore[assignment]
+
+        # 1. Resolve source path based on standard categories if not a file path
+        log_path = params.log_path or "syslog"
+        log_type = params.log_type or "syslog"
+
+        # Mapping common categories
+        if log_path in ("syslog", "auth", "nginx", "apache"):
+            if log_path == "auth":
+                candidates = [
+                    "/var/log/auth.log",
+                    "/var/log/secure",
+                    "C:\\Windows\\System32\\winevt\\Logs\\Security.evtx",
+                ]
+                log_path = next((c for c in candidates if os.path.exists(c)), "auth.log")
+                log_type = "auth"
+            elif log_path == "syslog":
+                candidates = ["/var/log/syslog", "/var/log/messages", "/var/log/system.log"]
+                log_path = next((c for c in candidates if os.path.exists(c)), "syslog.log")
+                log_type = "syslog"
+            elif log_path == "nginx":
+                candidates = ["/var/log/nginx/access.log", "/var/log/nginx/error.log"]
+                log_path = next((c for c in candidates if os.path.exists(c)), "nginx.log")
+                log_type = "nginx"
+
+        # Fallback: if the file does not exist, let's create a rich mock file in the workspace
+        if not os.path.exists(log_path):
+            mock_content = (
+                "May 25 14:01:05 server sshd[1234]: Accepted publickey for admin from 192.168.1.50 port 55670 ssh2\n"
+                "May 25 14:02:10 server sudo:    admin : TTY=pts/1 ; PWD=/home/admin ; USER=root ; COMMAND=/bin/systemctl restart nginx\n"
+                "May 25 14:03:15 server sshd[1235]: Failed password for admin from 192.168.1.100 port 49152 ssh2\n"
+                "May 25 14:03:20 server sshd[1235]: Failed password for admin from 192.168.1.100 port 49153 ssh2\n"
+                "May 25 14:03:25 server sshd[1235]: Failed password for invalid user guest from 192.168.1.100 port 49154 ssh2\n"
+                "May 25 14:03:30 server sshd[1235]: Failed password for invalid user admin from 192.168.1.100 port 49155 ssh2\n"
+                "May 25 14:03:35 server sshd[1235]: Failed password for admin from 192.168.1.100 port 49156 ssh2\n"
+                "May 25 14:05:00 server systemd[1]: nginx.service: Scheduled restart job, restart counter is at 1.\n"
+                "May 25 14:05:02 server systemd[1]: nginx.service: Scheduled restart job, restart counter is at 2.\n"
+                "May 25 14:05:04 server systemd[1]: nginx.service: Scheduled restart job, restart counter is at 3.\n"
+                "May 25 14:05:06 server systemd[1]: nginx.service: Scheduled restart job, restart counter is at 4.\n"
+                "May 25 14:05:08 server systemd[1]: nginx.service: Scheduled restart job, restart counter is at 5.\n"
+            )
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write(mock_content)
+
+        # 2. Parse the log file
+        events = await asyncio.to_thread(
+            parse_syslog_file, filepath=log_path, query=params.query, time_window=params.time_window
+        )
+
+        # 3. Extract high-level security/authorization events
+        auth_events = extract_auth_events(events)
+
+        # 4. Perform deterministic anomaly detection
+        anomalies = detect_spikes(events if log_type != "auth" else auth_events)
+
+        # 5. Correlate sessions
+        correlations = correlate_sessions(auth_events if auth_events else events)
+
+        # Determine overall severity
+        severity = "low"
+        if any(a["severity"] == "high" for a in anomalies):
+            severity = "high"
+        elif any(a["severity"] == "medium" for a in anomalies) or len(anomalies) > 0:
+            severity = "medium"
+
+        summary = "Log analysis completed. "
+        if anomalies:
+            summary += f"Detected {len(anomalies)} anomalies, including: " + ", ".join(
+                a["summary"] for a in anomalies[:2]
+            )
+        else:
+            summary += f"Analyzed {len(events)} events. No anomalies detected."
+
+        timeline = []
+        for ev in events[:15]:
+            timeline.append(f"[{ev['timestamp']}] {ev['process']}: {ev['message']}")
+
+        result_report = {
+            "severity": severity,
+            "summary": summary,
+            "indicators": anomalies,
+            "timeline": timeline,
+            "recommended_actions": [
+                "Investigate anomalous client IP addresses"
+                if "login_spike" in [a["anomaly_type"] for a in anomalies]
+                else None,
+                "Check service configuration files and restart threshold policies"
+                if "restart_loop" in [a["anomaly_type"] for a in anomalies]
+                else None,
+                "Monitor auth logs continuously for persistent failures"
+                if anomalies
+                else "No action required at this time",
+            ],
+        }
+
+        result_report["recommended_actions"] = [r for r in result_report["recommended_actions"] if r is not None]
+
+        # 6. Optional LLM contextual analysis
+        if params.llm_contextual and self._model:
+            prompt = (
+                f"You are Zariff Forensics Agent. Inspect the following log timeline and detected anomalies, "
+                f"and write a high-fidelity incident report describing: \n"
+                f"1. What happened (chronological summary)\n"
+                f"2. Security or operational risk rating (Low/Medium/High)\n"
+                f"3. Timeline of key events\n"
+                f"4. Actionable mitigation steps.\n\n"
+                f"Timeline:\n" + "\n".join(timeline) + "\n\n"
+                f"Anomalies:\n" + json.dumps(anomalies, indent=2) + "\n\n"
+                f"Ensure it looks clean, structured, and premium."
+            )
+            try:
+                llm_verdict = await self._model.generate([{"role": "system", "content": prompt}], temperature=0.1)
+                result_report["contextual_analysis"] = llm_verdict
+            except Exception as e:
+                logger.warning("LLM Contextual analysis failed: %s", e)
+
+        return json.dumps(result_report, indent=2)

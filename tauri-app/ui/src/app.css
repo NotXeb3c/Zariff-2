@@ -1,0 +1,194 @@
+@import "./styles/highlight.css";
+
+/* ────────────────────────────────────────────────────────────────────────────
+   ZARIFF // NEON PROTOCOL — cyberpunk dark design system
+   Deep-space backgrounds, neon cyan primary, magenta secondary, violet tertiary.
+   ──────────────────────────────────────────────────────────────────────────── */
+:root {
+  --bg-primary: #05060f;
+  --bg-secondary: #0a0c1c;
+  --bg-tertiary: #12142b;
+  --bg-hover: #191d3d;
+  --border: #282c54;
+  --text-primary: #eef0ff;
+  --text-secondary: #9aa3d8;
+  --text-muted: #5d6498;
+
+  --accent: #00e5ff;
+  --accent-hover: #3becff;
+  --accent-muted: rgba(0, 229, 255, 0.12);
+  --accent-light: #a6f6ff;
+  --accent-alt: #ff2ea6;
+  --accent-alt-hover: #ff57b9;
+  --accent-alt-muted: rgba(255, 46, 166, 0.12);
+  --violet: #a06bff;
+  --violet-muted: rgba(160, 107, 255, 0.14);
+
+  --success: #00ff9c;
+  --warning: #ffd500;
+  --danger: #ff4d6d;
+  --danger-hover: #d6304f;
+  --danger-bg: rgba(255, 77, 109, 0.12);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  --glow-cyan: 0 0 16px rgba(0, 229, 255, 0.45);
+  --glow-magenta: 0 0 16px rgba(255, 46, 166, 0.45);
+  --glow-violet: 0 0 16px rgba(160, 107, 255, 0.45);
+
+  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+:root.light-mode {
+  --bg-primary: #f2f4ff;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e8ebfa;
+  --bg-hover: #dde2f7;
+  --border: #c4cbee;
+  --text-primary: #131638;
+  --text-secondary: #4b5285;
+  --text-muted: #8b92bd;
+
+  --accent: #0086a8;
+  --accent-hover: #006f8c;
+  --accent-muted: rgba(0, 134, 168, 0.1);
+  --accent-light: #00a9d6;
+  --accent-alt: #d6007d;
+  --accent-alt-hover: #ad0066;
+  --accent-alt-muted: rgba(214, 0, 125, 0.08);
+  --violet: #6d38d6;
+  --violet-muted: rgba(109, 56, 214, 0.08);
+
+  --success: #00a06a;
+  --warning: #c78c00;
+  --danger: #d81b3f;
+  --danger-hover: #ad1230;
+  --danger-bg: rgba(216, 27, 63, 0.08);
+  --shadow: 0 10px 36px rgba(19, 22, 56, 0.14);
+  --glow-cyan: 0 0 12px rgba(0, 134, 168, 0.25);
+  --glow-magenta: 0 0 12px rgba(214, 0, 125, 0.2);
+  --glow-violet: 0 0 12px rgba(109, 56, 214, 0.2);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(1100px 750px at 85% -10%, rgba(255, 46, 166, 0.12), transparent 55%),
+    radial-gradient(1000px 700px at -10% 110%, rgba(0, 229, 255, 0.14), transparent 55%),
+    radial-gradient(900px 620px at 55% 45%, rgba(160, 107, 255, 0.07), transparent 60%),
+    linear-gradient(180deg, #05060f 0%, #080a18 100%);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
+}
+
+/* Subtle neon grid floor */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(0, 229, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.045) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 85% 70% at 50% 35%, black 35%, transparent 100%);
+  mask-image: radial-gradient(ellipse 85% 70% at 50% 35%, black 35%, transparent 100%);
+}
+
+/* Faint scanlines */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.015) 0 1px,
+    transparent 1px 4px
+  );
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+}
+
+#app,
+header,
+sidebar,
+main,
+div,
+button {
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent), var(--violet));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-hover);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  outline: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+/* Neon focus treatment */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
+  border-radius: var(--radius-sm);
+}

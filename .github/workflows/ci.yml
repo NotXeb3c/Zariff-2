@@ -1,0 +1,248 @@
+name: "CI — Lint & Test"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Python Linting & Tests ──
+  python:
+    name: Python (Ruff + Pytest)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.11', '3.12']
+    defaults:
+      run:
+        working-directory: daemon
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[full,dev]" || pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check . --output-format=github --no-cache
+
+      - name: Ruff format check
+        run: ruff format --check . --no-cache
+
+      - name: Run tests
+        run: pip install pytest-timeout && pytest tests/ -v --tb=short --timeout=300
+
+  # ── Frontend Linting ──
+  frontend:
+    name: Svelte (Prettier + Build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tauri-app/ui
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: tauri-app/ui/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          success=false
+          for i in {1..3}; do
+            if npm ci || npm install; then
+              success=true
+              break
+            fi
+            echo "Attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+          if [ "$success" = false ]; then
+            echo "Installation failed after 3 attempts"
+            exit 1
+          fi
+
+      - name: Prettier format check
+        run: npx prettier --check "src/**/*.{svelte,ts,js,css}" "vite.config.ts"
+
+      - name: Svelte check (type checking)
+        run: npx svelte-check --tsconfig ./tsconfig.json
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Static frontend checks
+        run: npm run test:static
+
+      - name: Frontend unit tests
+        run: npm run test:unit -- --run
+
+      - name: Build check
+        run: npx vite build
+
+  # ── Visual Regression Tests ──
+  visual-regression:
+    name: Visual Regression (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: tauri-app/ui
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: tauri-app/ui/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          success=false
+          for i in {1..3}; do
+            if npm ci || npm install; then
+              success=true
+              break
+            fi
+            echo "Attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+          if [ "$success" = false ]; then
+            echo "Installation failed after 3 attempts"
+            exit 1
+          fi
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Check if baselines exist for this OS
+        id: check_baselines
+        run: |
+          # Playwright appends the OS name to snapshots (e.g. -linux.png, -win32.png, -darwin.png)
+          OS_SUFFIX="linux"
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then OS_SUFFIX="win32"; fi
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then OS_SUFFIX="darwin"; fi
+          echo "os_suffix=$OS_SUFFIX" >> $GITHUB_OUTPUT
+          
+          SNAPSHOT_DIR="tests/visual/__snapshots__"
+          if [ -n "$(find $SNAPSHOT_DIR -name "*${OS_SUFFIX}.png" 2>/dev/null | head -1)" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate missing baseline snapshots
+        if: steps.check_baselines.outputs.exists == 'false'
+        run: npx playwright test --update-snapshots --reporter=github
+        env:
+          CI: "true"
+
+      - name: Upload generated baselines for review
+        if: steps.check_baselines.outputs.exists == 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-baselines-${{ matrix.os }}
+          path: tauri-app/ui/tests/visual/__snapshots__/**/*-chromium-${{ steps.check_baselines.outputs.os_suffix }}.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Run visual regression tests (comparison)
+        run: npx playwright test --reporter=github
+        env:
+          CI: "true"
+
+      - name: Upload diff artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-regression-diffs-${{ matrix.os }}
+          path: tauri-app/ui/test-results/
+          retention-days: 7
+
+  # ── Rust Linting ──
+  rust:
+    name: Rust (Clippy + Fmt)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "tauri-app/src-tauri -> target"
+
+      # Build frontend first (Tauri needs it)
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: tauri-app/ui/package-lock.json
+
+      - name: Build frontend
+        working-directory: tauri-app/ui
+        run: |
+          success=false
+          for i in {1..3}; do
+            if npm ci || npm install; then
+              success=true
+              break
+            fi
+            echo "Attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+          if [ "$success" = false ]; then
+            echo "Installation failed after 3 attempts"
+            exit 1
+          fi
+          npx vite build
+
+      - name: Cargo fmt check
+        working-directory: tauri-app/src-tauri
+        run: cargo fmt -- --check
+
+      - name: Cargo clippy
+        working-directory: tauri-app/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Cargo tests
+        working-directory: tauri-app/src-tauri
+        run: cargo test --all-targets

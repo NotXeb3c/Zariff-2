@@ -1,0 +1,81 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.venv
+.env.*
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+pilot_*.log
+
+# Vault / Secrets
+vault.enc
+*.enc
+*.key
+*.pem
+
+# Test artifacts
+!daemon/tests/test_react_latency.py
+!daemon/tests/test_ipc_integration.py
+!daemon/tests/test_pty_session.py
+!daemon/tests/test_dom_diff.py
+!daemon/tests/test_ssh_agent_schema.py
+!daemon/tests/test_wasm_plugin.py
+test_*.txt
+test_*.json
+test_*.html
+*_output.txt
+*_results.json
+*_summary.txt
+*_detailed.txt
+raw_llm_debug.json
+prompt_dump*.txt
+
+# Temp files
+null
+*.tmp
+pilot_data_*.txt
+
+# Tauri build
+target/
+src-tauri/target/
+tauri-app/src-tauri/target/
+tauri-app/src-tauri/gen/
+
+# Rust
+*.rs.bk
+
+# Frontend build
+ui/dist/
+ui/build/
+
+# Local maintainer release material
+docs/RELEASING.md
+/report.md
+
+daemon/benchmarks/.bench-state/
+daemon/neuralset*
+daemon/tribev2*
+neuralset.extractors*/
+!daemon/tests/test_*.py

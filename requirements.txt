@@ -1,0 +1,18 @@
+PySide6>=6.6.0
+httpx>=0.27.0
+psutil>=5.9.0
+pyttsx3>=2.90
+sounddevice>=0.4.6
+numpy>=1.26.0
+duckduckgo-search>=6.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+mss>=9.0.0
+Pillow>=10.0.0
+pycaw>=20240210
+comtypes>=1.2.0
+pywin32>=306
+
+# Optional voice (install for offline STT): pip install faster-whisper
+# faster-whisper>=1.0.0

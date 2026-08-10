@@ -1,0 +1,40 @@
+name: Plugin Marketplace Validation
+
+on:
+  pull_request:
+    paths:
+      - "plugins/**"
+      - "scripts/validate_marketplace.py"
+      - "daemon/pilot/plugins/marketplace.py"
+      - ".github/workflows/marketplace.yml"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/**"
+      - "scripts/validate_marketplace.py"
+      - "daemon/pilot/plugins/marketplace.py"
+      - ".github/workflows/marketplace.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate catalog and packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate marketplace catalog
+        run: python scripts/validate_marketplace.py
+
+      - name: Compile approved Python plugins
+        run: python -m compileall -q plugins
