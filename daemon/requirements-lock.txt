@@ -385,7 +385,7 @@ pynvml==13.0.1
     # via pilot-daemon (pyproject.toml)
 pyparsing==3.3.2
     # via matplotlib
-pypdf==6.14.2
+pypdf==6.15.0
     # via pilot-daemon (pyproject.toml)
 pyperclip==1.11.0
     # via
