@@ -527,7 +527,7 @@ tomli==2.4.1
     # via pilot-daemon (pyproject.toml)
 tomli-w==1.2.0
     # via pilot-daemon (pyproject.toml)
-torch==2.6.0
+torch==2.13.0
     # via
     #   easyocr
     #   openai-whisper
