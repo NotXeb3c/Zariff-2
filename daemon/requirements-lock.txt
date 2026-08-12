@@ -118,7 +118,7 @@ googleapis-common-protos==1.75.0
     # via opentelemetry-exporter-otlp-proto-grpc
 greenlet==3.5.3
     # via playwright
-grpcio==1.82.1
+grpcio==1.83.0
     # via
     #   chromadb
     #   opentelemetry-exporter-otlp-proto-grpc
