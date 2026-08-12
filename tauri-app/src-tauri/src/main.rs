@@ -1,4 +1,4 @@
-﻿// Zariff — AI System Control Agent
+// Zariff — AI System Control Agent
 // Tauri v2 application entry point
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod commands;
@@ -22,7 +22,7 @@ const DAEMON_HOST: &str = "127.0.0.1";
 const DAEMON_PORT: u16 = 8785;
 fn get_app_data_dir() -> std::path::PathBuf {
     let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    home.join(".config").join("heliox-os")
+    home.join(".config").join("zariff")
 }
 fn get_venv_python() -> std::path::PathBuf {
     let venv_dir = get_app_data_dir().join("env");
@@ -50,10 +50,7 @@ fn try_spawn_with(python: &std::path::Path) -> Option<Child> {
     match cmd.spawn() {
         Ok(child) => Some(child),
         Err(e) => {
-            eprintln!(
-                "[Zariff] Failed to spawn daemon with {:?}: {}",
-                python, e
-            );
+            eprintln!("[Zariff] Failed to spawn daemon with {:?}: {}", python, e);
             None
         }
     }
@@ -91,9 +88,7 @@ fn setup_venv_in_background() {
         let data_dir = get_app_data_dir();
         let _ = std::fs::create_dir_all(&data_dir);
         let venv_dir = data_dir.join("env");
-        println!(
-            "[Zariff] First run detected — setting up virtual environment in background..."
-        );
+        println!("[Zariff] First run detected — setting up virtual environment in background...");
         // 1. Create venv
         #[cfg(target_os = "windows")]
         let sys_python = "python";
@@ -310,7 +305,7 @@ fn get_log_count() -> usize {
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".local")
         .join("state")
-        .join("heliox-os")
+        .join("zariff")
         .join("pilot.log");
     std::fs::read_to_string(log_path)
         .map(|contents| contents.lines().count())
@@ -324,7 +319,7 @@ fn get_rss_feed() -> Vec<serde_json::Value> {
             "Zariff v{} Active Release (JARVIS Core Engine)",
             env!("CARGO_PKG_VERSION")
         ),
-        "url": "https://github.com/VyomKulshrestha/Heliox-OS/releases",
+        "url": "https://github.com/NotXeb3c/zariff-2/releases",
         "source": "Current Build"
     })];
     if let Ok(output) = std::process::Command::new("git")
@@ -342,7 +337,7 @@ fn get_rss_feed() -> Vec<serde_json::Value> {
                 if !parts.is_empty() && !parts[0].is_empty() {
                     feed.push(serde_json::json!({
                         "title": format!("Release {}: {}", parts[0], if parts.len() > 2 && !parts[2].is_empty() { parts[2] } else { "Official Zariff Distribution" }),
-                        "url": format!("https://github.com/VyomKulshrestha/Heliox-OS/releases/tag/{}", parts[0]),
+                        "url": format!("https://github.com/NotXeb3c/zariff-2/releases/tag/{}", parts[0]),
                         "source": format!("Release Tag ({})", if parts.len() > 1 && !parts[1].is_empty() { parts[1] } else { "Published" })
                     }));
                 }
@@ -352,7 +347,7 @@ fn get_rss_feed() -> Vec<serde_json::Value> {
     if feed.len() == 1 {
         feed.push(serde_json::json!({
             "title": "Cognitive Engine & Threat Containment Bridge Live",
-            "url": "https://github.com/VyomKulshrestha/Heliox-OS",
+            "url": "https://github.com/NotXeb3c/zariff-2",
             "source": "System Feature"
         }));
     }

@@ -1,6 +1,6 @@
 [package]
-name = "heliox-os"
-version = "0.10.1"
+name = "zariff"
+version = "0.10.2"
 edition = "2021"
 description = "Zariff — AI System Control Agent"
 license = "MIT"

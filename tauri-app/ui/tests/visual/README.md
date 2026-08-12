@@ -1,6 +1,6 @@
 # Visual Regression Tests
 
-Playwright-based visual regression suite for the Heliox OS UI.
+Playwright-based visual regression suite for the Zariff UI.
 Tests run against the **Vite dev server** (`http://localhost:1420`) — no Tauri binary or daemon required.
 
 ## Structure

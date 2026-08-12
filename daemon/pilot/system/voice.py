@@ -1,4 +1,4 @@
-﻿"""Voice Input/Output — talk to Zariff like JARVIS.
+"""Voice Input/Output — talk to Zariff like JARVIS.
 
 Speech-to-text via Whisper (local or API), text-to-speech via
 system TTS or edge-tts, and optional wake word detection.
@@ -57,11 +57,13 @@ _AUTONOMOUS_SHORT_DECISIONS = frozenset(
 )
 
 _ZARIFF_PRONUNCIATION = "Zah-riff"
+_HELIOX_PRONUNCIATION = "Hee-lee-ox"
 
 
 def _prepare_spoken_text(text: str) -> str:
     """Apply product-name pronunciations consistently across every TTS engine."""
-    return re.sub(r"\bzariff\b", _ZARIFF_PRONUNCIATION, text, flags=re.IGNORECASE)
+    text = re.sub(r"\bzariff\b", _ZARIFF_PRONUNCIATION, text, flags=re.IGNORECASE)
+    return re.sub(r"\bheliox\b", _HELIOX_PRONUNCIATION, text, flags=re.IGNORECASE)
 
 
 def _looks_like_autonomous_voice_intent(text: str) -> bool:

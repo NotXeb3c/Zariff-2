@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 from pilot.config import PLUGINS_DIR
 
 if TYPE_CHECKING:
-    from pilot.network.mesh import HelioxMesh
+    from pilot.network.mesh import ZariffMesh
 
 logger = logging.getLogger("pilot.network.skill_sync")
 
@@ -40,12 +40,12 @@ class SkillSync:
     Parameters
     ----------
     mesh:
-        The ``HelioxMesh`` instance used to broadcast to peers.
+        The ``ZariffMesh`` instance used to broadcast to peers.
     plugin_base_dir:
         Base directory for plugins (default: ``PLUGINS_DIR`` from ``pilot.config``).
     """
 
-    def __init__(self, mesh: HelioxMesh, plugin_base_dir: str | None = None) -> None:
+    def __init__(self, mesh: ZariffMesh, plugin_base_dir: str | None = None) -> None:
         self._mesh = mesh
         base = Path(plugin_base_dir or PLUGINS_DIR)
         self._peer_dir = base / _PEER_PLUGIN_SUBDIR

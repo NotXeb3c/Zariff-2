@@ -95,7 +95,7 @@ class BiometricStore:
     """Persists biometric data to disk."""
 
     def __init__(self, data_dir: Path | None = None):
-        self._data_dir = data_dir or (Path.home() / ".cache" / "heliox" / "biometric")
+        self._data_dir = data_dir or (Path.home() / ".cache" / "zariff" / "biometric")
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_fingerprint_path(self, user_id: str) -> Path:

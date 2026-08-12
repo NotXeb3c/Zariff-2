@@ -1,4 +1,4 @@
-"""Fail-closed capability declarations for Heliox plugins."""
+"""Fail-closed capability declarations for Zariff plugins."""
 
 from __future__ import annotations
 

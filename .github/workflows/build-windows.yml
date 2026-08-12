@@ -48,6 +48,11 @@ jobs:
         run: npm ci
 
 
+      - name: Install UI dependencies (Vite builds the frontend during tauri build)
+        working-directory: tauri-app/ui
+        run: npm ci
+
+
       - name: Build Zariff
         working-directory: tauri-app
         run: npm run tauri build

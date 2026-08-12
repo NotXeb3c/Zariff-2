@@ -1,4 +1,4 @@
-﻿"""Report the daemon's real operating-system privilege state."""
+"""Report the daemon's real operating-system privilege state."""
 
 from __future__ import annotations
 

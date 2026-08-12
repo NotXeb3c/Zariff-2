@@ -1,4 +1,4 @@
-﻿"""Forensics & Log Analysis Tools for Zariff.
+"""Forensics & Log Analysis Tools for Zariff.
 
 Provides lightweight deterministic analysis, normalization schemas, and anomaly
 detection on common OS log files (auth, syslog, service, nginx, apache, etc.).

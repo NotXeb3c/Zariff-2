@@ -2,7 +2,7 @@
 
 ## 💬 Discussions
 
-We use [GitHub Discussions](https://github.com/VyomKulshrestha/Heliox-OS/discussions) for community conversations.
+We use [GitHub Discussions](https://github.com/NotXeb3c/zariff-2/discussions) for community conversations.
 
 ### Discussion Categories
 

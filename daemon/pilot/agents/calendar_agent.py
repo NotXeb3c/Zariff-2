@@ -1,4 +1,4 @@
-﻿"""Calendar agent for local .ics parsing and CalDAV integration."""
+"""Calendar agent for local .ics parsing and CalDAV integration."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pilot.config import PilotConfig
     from pilot.models.router import ModelRouter
     from pilot.security.gateway import TaskScopeOverride
-    from pilot.security.vault import Vault
+    from pilot.security.vault import KeyVault
 
 logger = logging.getLogger("pilot.agents.calendar_agent")
 
@@ -30,7 +30,7 @@ class CalendarAgent(BaseAgent):
         self,
         model_router: ModelRouter,
         config: PilotConfig,
-        vault: Vault,
+        vault: KeyVault,
     ) -> None:
         super().__init__(role=AgentRole.CALENDAR, model_router=model_router)
         self._config = config

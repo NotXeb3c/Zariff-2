@@ -1,4 +1,4 @@
-﻿"""System Agent — handles OS operations like files, processes, services.
+"""System Agent — handles OS operations like files, processes, services.
 
 This is the workhorse agent for all direct system interactions:
 filesystem, packages, services, power, environment, window management,

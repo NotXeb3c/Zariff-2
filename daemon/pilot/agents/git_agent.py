@@ -1,4 +1,4 @@
-﻿"""Git automation agent for Zariff."""
+"""Git automation agent for Zariff."""
 
 from __future__ import annotations
 

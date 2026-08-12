@@ -1,18 +1,18 @@
-# Heliox OS — AI System Control Agent
+# Zariff — AI System Control Agent
 
 <p align="center">
   <a href="https://gssoc.girlscript.org/"><img src="https://img.shields.io/badge/GSSoC-2026-F96F59?style=for-the-badge" alt="GSSoC 2026"></a>
-  <a href="https://github.com/VyomKulshrestha/Heliox-OS/releases"><img src="https://img.shields.io/github/v/release/VyomKulshrestha/Heliox-OS?style=for-the-badge&color=00f0ff&label=Release" alt="Release"></a>
-  <a href="https://github.com/VyomKulshrestha/Heliox-OS/releases"><img src="https://img.shields.io/github/downloads/VyomKulshrestha/Heliox-OS/total?style=for-the-badge&color=7c6fe0&label=Downloads" alt="Downloads"></a>
-  <a href="https://github.com/VyomKulshrestha/Heliox-OS/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/VyomKulshrestha/Heliox-OS/release.yml?style=for-the-badge&label=Build" alt="Build Status"></a>
-  <a href="https://github.com/VyomKulshrestha/Heliox-OS/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/VyomKulshrestha/Heliox-OS/ci.yml?style=for-the-badge&label=CI&color=44cc11" alt="CI"></a>
-  <a href="https://github.com/VyomKulshrestha/Heliox-OS/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><img src="https://img.shields.io/github/issues/VyomKulshrestha/Heliox-OS/good%20first%20issue?style=for-the-badge&color=purple&label=Good%20First%20Issues" alt="Good First Issues"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/VyomKulshrestha/Heliox-OS?style=for-the-badge&color=blue" alt="License"></a>
+  <a href="https://github.com/NotXeb3c/zariff-2/releases"><img src="https://img.shields.io/github/v/release/NotXeb3c/zariff-2?style=for-the-badge&color=00f0ff&label=Release" alt="Release"></a>
+  <a href="https://github.com/NotXeb3c/zariff-2/releases"><img src="https://img.shields.io/github/downloads/NotXeb3c/zariff-2/total?style=for-the-badge&color=7c6fe0&label=Downloads" alt="Downloads"></a>
+  <a href="https://github.com/NotXeb3c/zariff-2/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/NotXeb3c/zariff-2/release.yml?style=for-the-badge&label=Build" alt="Build Status"></a>
+  <a href="https://github.com/NotXeb3c/zariff-2/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/NotXeb3c/zariff-2/ci.yml?style=for-the-badge&label=CI&color=44cc11" alt="CI"></a>
+  <a href="https://github.com/NotXeb3c/zariff-2/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><img src="https://img.shields.io/github/issues/NotXeb3c/zariff-2/good%20first%20issue?style=for-the-badge&color=purple&label=Good%20First%20Issues" alt="Good First Issues"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/NotXeb3c/zariff-2?style=for-the-badge&color=blue" alt="License"></a>
   <img src="https://img.shields.io/badge/Platform-Windows%20|%20macOS%20|%20Linux-333?style=for-the-badge" alt="Platform">
 </p>
 
 <p align="center">
-  <img src="./docs/assets/heliox-command-center-dark.png" alt="Heliox OS Command Center in dark mode" width="900">
+  <img src="./docs/assets/heliox-command-center-dark.png" alt="Zariff Command Center in dark mode" width="900">
 </p>
 
 <p align="center">
@@ -37,13 +37,13 @@
 ---
 ## 🌱 New Contributor Onboarding
 
-New to open source? New to Heliox OS? Start here.
+New to open source? New to Zariff? Start here.
 
 This guide helps first-time contributors understand the project structure, set up the development environment, and make their first contribution.
 
-### What is Heliox OS?
+### What is Zariff?
 
-Heliox OS is an AI-powered operating system agent that combines planning, execution, verification, memory, and security into a unified multi-agent system.
+Zariff is an AI-powered operating system agent that combines planning, execution, verification, memory, and security into a unified multi-agent system.
 
 ### Before Contributing
 
@@ -58,7 +58,7 @@ We recommend:
 ### Project Structure Overview
 
 ```text
-heliox-os/
+zariff/
 ├── daemon/          Python agent runtime and tests
 ├── tauri-app/       Tauri desktop shell and Svelte UI
 ├── plugins/         Reviewed marketplace packages and catalog
@@ -67,9 +67,9 @@ heliox-os/
 └── docs/            Operational and contributor guides
 ```
 
-## Why Heliox OS?
+## Why Zariff?
 
-Unlike simple command runners, Heliox OS is a **stateful agentic system** with
+Unlike simple command runners, Zariff is a **stateful agentic system** with
 observable interaction phases and a **modular multi-agent orchestrator**. Typed
 and spoken requests share the same guarded plan, act, verify, and recovery path:
 
@@ -84,16 +84,16 @@ and spoken requests share the same guarded plan, act, verify, and recovery path:
 <a id="jarvis-autonomy"></a>
 ## 🤖 JARVIS Autonomy (v0.10.1)
 
-Heliox OS combines reactive commands with opt-in proactive and background capabilities that run through the same permission and verification pipeline:
+Zariff combines reactive commands with opt-in proactive and background capabilities that run through the same permission and verification pipeline:
 
 - 🧠 **Adaptive Proactive Suggestions**: Pattern-matches local screen context and surfaces visible, optional help before you ask. Accept/dismiss feedback persists on-device, tunes each pattern's timing and priority, and temporarily suppresses repeatedly rejected suggestions. Acceptance still enters the guarded autonomous permission and verification pipeline.
 - 🤝 **Interactive Execution Companion**: Independently reviews proposed plans, can warn, revise, or stop work that drifts from the request, accepts typed or spoken corrections while a task is running, and offers grounded next ideas after verified results.
 - ⚡ **Fire-and-Forget Autonomous Jobs**: Spawn complex multi-step background tasks that decompose, execute, and verify completely independent of the UI or main event loop.
 - 👁️ **Always-On Screen Awareness**: Automatically bootstrapped computer vision that tracks your contextual state cross-platform, natively bridging exactly what you see into the LLM planner. 
-- 🎤 **Continuous Voice Listener**: Real-time push-free 'Hey Heliox' ambient wake-word dispatch for frictionless task execution. Endpoints on natural speech start/silence (VAD) instead of a fixed recording window, and supports barge-in — start talking and Heliox stops mid-sentence to listen, instead of talking over you.
-- 🔁 **Continuous Conversation**: While listening is enabled, complete utterances can enter the same safe execution path without repeating the wake word. After Heliox answers, a bounded 30-second follow-up window stays open for corrections or the next instruction; Heliox suppresses its own TTS from being recognized as user speech.
-- 🧭 **Adaptive App Tasks**: Multi-step browser and desktop goals run as a bounded observe → act → verify loop. Heliox refreshes screen evidence between rounds, plans only the next grounded action, rejects unverified completion claims, and stops after six rounds or repeated no-progress plans.
-- 🪟 **Target-Bound Desktop Control**: Background text entry is tied to the task's intended native window. Heliox re-focuses and verifies the target instead of typing into whichever app happens to be foreground, and installed-app launchers fail clearly when a name is missing or ambiguous.
+- 🎤 **Continuous Voice Listener**: Real-time push-free 'Hey Zariff' ambient wake-word dispatch for frictionless task execution. Endpoints on natural speech start/silence (VAD) instead of a fixed recording window, and supports barge-in — start talking and Zariff stops mid-sentence to listen, instead of talking over you.
+- 🔁 **Continuous Conversation**: While listening is enabled, complete utterances can enter the same safe execution path without repeating the wake word. After Zariff answers, a bounded 30-second follow-up window stays open for corrections or the next instruction; Zariff suppresses its own TTS from being recognized as user speech.
+- 🧭 **Adaptive App Tasks**: Multi-step browser and desktop goals run as a bounded observe → act → verify loop. Zariff refreshes screen evidence between rounds, plans only the next grounded action, rejects unverified completion claims, and stops after six rounds or repeated no-progress plans.
+- 🪟 **Target-Bound Desktop Control**: Background text entry is tied to the task's intended native window. Zariff re-focuses and verifies the target instead of typing into whichever app happens to be foreground, and installed-app launchers fail clearly when a name is missing or ambiguous.
 - 💬 **Local Chat Sessions**: Start a new chat or reopen a prior one from the history dialog. Each chat keeps its own transcript and active task context locally, while durable user preferences and evidence-backed memory remain available across sessions without copying an unbounded old transcript into every prompt.
 - 🤚 **30+ Hand Gestures & Air Drawing**: Control your PC via webcam with static poses (Palm, Pinch) and motion gestures (Two-Finger Swipe). A lightweight kinematic prediction layer smooths tracking and reduces misfires. An opt-in 3D world-model backend (`vision.mediapipe_backend: "tasks"`) adds real-metric-scale depth via MediaPipe's `HandLandmarker` — see [GESTURES.md](GESTURES.md#3d-world-model-layer-mediapipe-tasks). An opt-in coarse gaze-tracking modality (`vision.gaze_tracking_enabled`) fuses screen-region gaze with voice + gesture on-device — see [GESTURES.md](GESTURES.md#gaze-tracking-third-input-modality).
 - 🖱️ **Gesture Cursor Control** *(off by default)*: Point to move the real OS cursor, pinch to click — opt in via Settings. Open palm always exits instantly.
@@ -102,7 +102,7 @@ Heliox OS combines reactive commands with opt-in proactive and background capabi
 
 ## 🧠 Cognitive Engine Integrations
 
-Heliox OS integrates a lightweight, dependency-free **Cognitive Engine** (`pilot.cognitive.cognitive_engine`) directly into the operating logic. Attention/stress/load are explicitly labelled behavioural estimates derived from measured local keyboard, click, pointer, interaction-history, and opt-in gaze signals. The HUD reports confidence and never presents these estimates as medical or physiological measurements. No raw keystrokes, click targets, camera frames, or gaze images are stored or sent to a model:
+Zariff integrates a lightweight, dependency-free **Cognitive Engine** (`pilot.cognitive.cognitive_engine`) directly into the operating logic. Attention/stress/load are explicitly labelled behavioural estimates derived from measured local keyboard, click, pointer, interaction-history, and opt-in gaze signals. The HUD reports confidence and never presents these estimates as medical or physiological measurements. No raw keystrokes, click targets, camera frames, or gaze images are stored or sent to a model:
 
 1. **Cognitive HUD:** Shows smoothed attention/stress/load estimates together with signal count and confidence, avoiding false “100% certain” states when evidence is sparse.
 2. **Dynamic TTS Stress-Pacing:** JARVIS automatically slows down voice generation if you are engaged in high cognitive-load tasks.
@@ -133,7 +133,7 @@ print(recommendation.recommended, recommendation.interaction_type)
 ```
 
 ### 2. Ambient Intelligence Mode
-Instead of reactive commands, Heliox proactively suggests actions based on predicted cognitive state. Example: *"You've been on this task for 2 hours with increasing stress — want me to schedule a break?"*
+Instead of reactive commands, Zariff proactively suggests actions based on predicted cognitive state. Example: *"You've been on this task for 2 hours with increasing stress — want me to schedule a break?"*
 
 ```python
 from pilot.cognitive.ambient_intelligence import AmbientIntelligenceEngine
@@ -157,7 +157,7 @@ print(workspace.cognitive_state, workspace.predicted_need)
 ```
 
 ### 4. Cognitive Offloading
-When load > 80%, automatically surface "memory anchors" — key info from recent actions. Let Heliox absorb cognitive burden by remembering complex multi-step workflows.
+When load > 80%, automatically surface "memory anchors" — key info from recent actions. Let Zariff absorb cognitive burden by remembering complex multi-step workflows.
 
 ```python
 from pilot.cognitive.cognitive_offload import CognitiveOffloader
@@ -240,7 +240,7 @@ Additional adapters can be registered via `pipeline.register_adapter(...)` and s
 
 ## 🧠 Multi-Agent Orchestrator
 
-Heliox OS currently registers **21 concrete specialist agents across 20 source-scoped roles**. Communication and email intentionally share the `comm_agent` security identity while remaining separate runtime specialists.
+Zariff currently registers **21 concrete specialist agents across 20 source-scoped roles**. Communication and email intentionally share the `comm_agent` security identity while remaining separate runtime specialists.
 
 | Group | Specialists |
 |-------|-------------|
@@ -473,7 +473,7 @@ graph TD
         SubAgent["Subconscious Agent"]
         SubAgent -->|"persona rules"| Planner
         Reflector --> SubAgent
-        SubAgent --> PersonaFile["~/.local/share/heliox-os/persona.md"]
+        SubAgent --> PersonaFile["~/.local/share/zariff/persona.md"]
     end
 
     subgraph "Screen Awareness"
@@ -550,14 +550,14 @@ Prompt templates and verified strategy evolution are deliberately separate:
 
 ### 🔌 Plugin Ecosystem
 
-Heliox has two deliberately separate extension paths:
+Zariff has two deliberately separate extension paths:
 
 | Path | Current packages | Trust model |
 |------|------------------|-------------|
 | Built-in daemon integrations | Developer tools, media control, Home Assistant | Shipped and reviewed with the application |
 | Public marketplace | `weather`, `spotify-control`, `home-assistant` | Approved GitHub catalog, capability manifest, per-file SHA-256 verification, and constrained native/WASM execution |
 
-Local development plugins live in `~/.config/heliox-os/plugins/`. They are
+Local development plugins live in `~/.config/zariff/plugins/`. They are
 auto-discovered at startup only after Ed25519 signature verification. Local
 packages can include `plugin.ed25519.pub` with `plugin.ed25519.sig`; unsigned,
 untrusted, or tampered packages are rejected before their manifest or code is
@@ -594,7 +594,7 @@ A background agent that runs every 30 minutes to review the day's actions and le
 
 - Clusters behavioral patterns ("always writes Python", "prefers dark mode")
 - Extracts actionable rules with confidence scores
-- Writes `~/.local/share/heliox-os/persona.md` and injects high-confidence rules into both typed and voice planning
+- Writes `~/.local/share/zariff/persona.md` and injects high-confidence rules into both typed and voice planning
 - Supports manual preference setting via `persona_add_preference` API
 - Categories: `preference`, `habit`, `constraint`, `style`
 - Learned rules are advisory preferences only; they cannot grant permission, remove a safety warning, or override the current request
@@ -616,14 +616,14 @@ Continuous computer-vision loop that gives the agent awareness of what the user 
 
 The easiest way to get started is to download the pre-compiled installer for your operating system.
 
-1. Go to the [GitHub Releases page](https://github.com/VyomKulshrestha/Heliox-OS/releases).
+1. Go to the [GitHub Releases page](https://github.com/NotXeb3c/zariff-2/releases).
 2. Download the installer for your OS:
-   - **Windows**: the latest `Heliox-OS_<version>_x64-setup.exe` or `.msi`
-   - **macOS (Apple Silicon)**: the latest `Heliox-OS_<version>_aarch64.dmg`
-   - **macOS (Intel)**: the latest `Heliox-OS_<version>_x64.dmg`
+   - **Windows**: the latest `Zariff_<version>_x64-setup.exe` or `.msi`
+   - **macOS (Apple Silicon)**: the latest `Zariff_<version>_aarch64.dmg`
+   - **macOS (Intel)**: the latest `Zariff_<version>_x64.dmg`
    - **Linux**: `.AppImage`, `.deb`, or `.rpm`
 3. Install the app.
-4. Open Heliox OS and enter your API Key (e.g., Gemini, OpenAI, Claude, Meta) in the Settings tab.
+4. Open Zariff and enter your API Key (e.g., Gemini, OpenAI, Claude, Meta) in the Settings tab.
 
 The desktop app requires Python 3.11+ and starts the local daemon automatically.
 On first launch it may need time to create its environment and load local models;
@@ -651,12 +651,12 @@ pipeline, Kokoro TTS, and Pocket TTS do not require an NVIDIA GPU.
 > Note: Windows contributors can use the automated `setup.ps1` script for environment setup.  
 > If PowerShell blocks the script, check the Windows setup instructions in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-If you want to contribute or modify Heliox OS, build it from the source code:
+If you want to contribute or modify Zariff, build it from the source code:
 
 **1. Install the Python daemon:**
 ```bash
-git clone https://github.com/VyomKulshrestha/Heliox-OS.git
-cd Heliox-OS/daemon
+git clone https://github.com/NotXeb3c/zariff-2.git
+cd zariff-2/daemon
 pip install -e ".[all,dev]"
 ```
 
@@ -707,7 +707,7 @@ npm run tauri dev
 
 > [!WARNING]
 > **PLEASE READ BEFORE USE: SYSTEM COMPROMISE RISK**
-> Heliox OS is an autonomous agent with the ability to execute code, delete files, and run terminal commands directly on your host operating system. While we have provided sandbox measures, the AI has real system access. **Do NOT run Heliox OS with root/Administrator privileges** unless absolutely necessary. We are not responsible for accidental data loss caused by LLM hallucinations.
+> Zariff is an autonomous agent with the ability to execute code, delete files, and run terminal commands directly on your host operating system. While we have provided sandbox measures, the AI has real system access. **Do NOT run Zariff with root/Administrator privileges** unless absolutely necessary. We are not responsible for accidental data loss caused by LLM hallucinations.
 
 - All AI outputs pass through structured schema validation before execution
 - Five-tier permission system (read-only through root-level)
@@ -715,7 +715,7 @@ npm run tauri dev
 - **Irreversibility is tracked independently of tier** — actions that can't be undone by a snapshot rollback (external emails/webhooks, SSH commands, power actions, package removal) always require confirmation, even at a lower tier, and are flagged distinctly in the approval dialog
 - A secondary **LLM safety critic** independently reviews Tier 3 (destructive) and Tier 4 (root-critical) plans before the confirmation gate fires — it can block a plan outright or surface warnings alongside the approval dialog. Low-risk Tier 3 plans skip the LLM round-trip via a cheap heuristic pre-check, but the audit trail records when that happened
 - Dangerous shell argument patterns (recursive+force deletes, wildcard/root path targets) are flagged even on already-whitelisted commands
-- **Snapshot-based rollback** — Btrfs/Timeshift on Linux and Windows Restore Points on Windows. Required snapshots fail closed: if the selected backend is unavailable or the Windows daemon is not elevated, the destructive action does not run. Windows controls restore-point retention; Heliox retention settings apply where the backend supports them.
+- **Snapshot-based rollback** — Btrfs/Timeshift on Linux and Windows Restore Points on Windows. Required snapshots fail closed: if the selected backend is unavailable or the Windows daemon is not elevated, the destructive action does not run. Windows controls restore-point retention; Zariff retention settings apply where the backend supports them.
 - **Tamper-evident, HMAC-chained audit log** for every elevated permission decision, viewable and independently verifiable (integrity check) from the Settings panel
 - **Agent Gateway**: 25 source-scoped permission floors cover interactive/autonomous/modality/background paths and all 20 specialist roles. Each can be tightened but never widened by a per-task override; a separate tamper-evident chain records every gateway decision.
 - **Hybrid risk world model**: deterministic policy, structured OS/UI transition prediction, the calibrated 36,000-sample impact model, verified failure history, and optional validated UI-JEPA use the riskier result. Learned evidence can interrupt or add confirmation but cannot remove a rule-based warning or grant permission.
@@ -727,7 +727,7 @@ npm run tauri dev
 - **Simulate before executing (opt-in, autonomous tasks only)**: before an unattended background task commits to an action, pause and show a real screenshot with the target UI element highlighted — plus, for browser actions, a real measured before/after DOM diff from an isolated dry-run tab — and wait for you to confirm or stop; never a generated image — see [SECURITY.md](SECURITY.md#-simulate-before-executing-autonomous-background-tasks-opt-in)
 - **Natural local speech**: Kokoro is the default daemon-side voice, with selectable presets, coordinated single-channel playback, and speech-start barge-in. Pocket TTS remains selectable, and both neural engines fall back to the platform voice when unavailable.
 - **Mid-flight cancellation**: a Stop button in the chat panel really kills the currently in-flight command — a mid-flight shell subprocess is genuinely killed (`proc.kill()`), and PTY sessions are interrupted on demand — instead of only stopping the next action in the plan — see [SECURITY.md](SECURITY.md#-mid-flight-cancellation)
-- **User Manual Supervision (opt-in)**: watches your own independent screen/keyboard/mouse activity — not anything Heliox executes — to offer cognitive coaching and warn about risky-looking content; the keyboard/mouse hook is a separate, starker opt-in gated behind a one-time "I understand" confirmation, and nothing typed or clicked is ever saved or sent anywhere, only the fact that a risk pattern matched — see [SECURITY.md](SECURITY.md#-user-manual-supervision-opt-in)
+- **User Manual Supervision (opt-in)**: watches your own independent screen/keyboard/mouse activity — not anything Zariff executes — to offer cognitive coaching and warn about risky-looking content; the keyboard/mouse hook is a separate, starker opt-in gated behind a one-time "I understand" confirmation, and nothing typed or clicked is ever saved or sent anywhere, only the fact that a risk pattern matched — see [SECURITY.md](SECURITY.md#-user-manual-supervision-opt-in)
 - **Gesture cursor control is off by default** — the continuous gesture-to-cursor bridge drives the real OS mouse cursor and is the one feature in this app that acts without a per-action confirmation gate, so it requires an explicit opt-in in Settings and always exits instantly on an open palm, the panel's stop button, or disabling the toggle
 - **Reviewed plugin marketplace** — the app installs only catalog-approved packages, verifies every declared SHA-256 digest, signs the local installation, and routes planner-triggered plugin actions through the normal permission system
 - Command whitelist with optional unrestricted mode
@@ -748,7 +748,7 @@ Tier isn't the whole story: some Tier 2 actions (e.g. `api_send_email`, `ssh_com
 
 ## Configuration
 
-Config file: `~/.config/heliox-os/config.toml`
+Config file: `~/.config/zariff/config.toml`
 
 ```toml
 [model]
@@ -796,13 +796,13 @@ capture_interval_seconds = 3.0
 ### Frequently Asked Questions (FAQ)
 
 #### Q1: The daemon fails to start — what should I check?
-**A:** First, verify you are using **Python 3.11+**. Check your version with `python --version`. The desktop app starts the daemon and keeps reconnecting while first-run models initialize. If it remains offline, check `~/.local/state/heliox-os/pilot.log` and ensure port `8785` is free.
+**A:** First, verify you are using **Python 3.11+**. Check your version with `python --version`. The desktop app starts the daemon and keeps reconnecting while first-run models initialize. If it remains offline, check `~/.local/state/zariff/pilot.log` and ensure port `8785` is free.
 
 #### Q2: I get an API key error even though I entered one.
-**A:** Heliox OS stores API keys only in your operating-system credential store: Secret Service-compatible keyring on Linux, Credential Manager on Windows, or Keychain on macOS. It fails closed instead of falling back to a machine-derived encrypted file. A legacy `vault.enc` is ignored and left untouched; re-enter those keys through Settings. Heliox does **not** use `.env` files. On Linux, ensure a Secret Service provider such as GNOME Keyring is installed and unlocked.
+**A:** Zariff stores API keys only in your operating-system credential store: Secret Service-compatible keyring on Linux, Credential Manager on Windows, or Keychain on macOS. It fails closed instead of falling back to a machine-derived encrypted file. A legacy `vault.enc` is ignored and left untouched; re-enter those keys through Settings. Zariff does **not** use `.env` files. On Linux, ensure a Secret Service provider such as GNOME Keyring is installed and unlocked.
 
 #### Q3: How do I switch from Ollama to a cloud LLM?
-**A:** You can change your model provider in the `~/.config/heliox-os/config.toml` file. Under the `[model]` section, set `provider = "cloud"` and specify your `cloud_provider` (e.g., `"gemini"`, `"openai"`, `"claude"`, or `"meta"`). `"meta"` talks to Meta's Muse Spark 1.1 via the Meta Model API (public preview as of July 2026) — it's OpenAI-chat-completions-compatible, so it shares the same request path as `"openai"`.
+**A:** You can change your model provider in the `~/.config/zariff/config.toml` file. Under the `[model]` section, set `provider = "cloud"` and specify your `cloud_provider` (e.g., `"gemini"`, `"openai"`, `"claude"`, or `"meta"`). `"meta"` talks to Meta's Muse Spark 1.1 via the Meta Model API (public preview as of July 2026) — it's OpenAI-chat-completions-compatible, so it shares the same request path as `"openai"`.
 
 ```toml
 [model]
@@ -811,13 +811,13 @@ cloud_provider = "gemini"
 ```
 
 #### Q4: Voice detection isn't working on Linux.
-**A:** Install the `voice` extra, ensure PortAudio is available for `sounddevice`, select the correct input in Settings, and grant microphone permission to the terminal or Heliox app. The UI keeps push-to-talk retryable after a denied permission instead of requiring a reload.
+**A:** Install the `voice` extra, ensure PortAudio is available for `sounddevice`, select the correct input in Settings, and grant microphone permission to the terminal or Zariff app. The UI keeps push-to-talk retryable after a denied permission instead of requiring a reload.
 
 #### Q5: Hand gesture control requires a webcam — which ones are supported?
 **A:** Any standard USB or integrated webcam exposed by the browser/WebView media API should work. Hand tracking uses MediaPipe Hands or MediaPipe Tasks; gaze uses MediaPipe FaceLandmarker and remains on-device. If the camera is unavailable, close other camera users, grant camera permission, and set `camera_index` under `[vision]` if the daemon-side vision path needs a non-default device. Gesture and gaze inference share the same camera stream, so enabling gaze must not suppress hand tracking.
 
 #### Q6: Port already in use (8785 or 8786).
-**A:** Heliox OS uses port `8785` for the API and `8786` for mesh networking. If these ports are occupied, you can identify and stop the conflicting process:
+**A:** Zariff uses port `8785` for the API and `8786` for mesh networking. If these ports are occupied, you can identify and stop the conflicting process:
 
 **Linux/macOS:**
 ```bash
@@ -845,17 +845,17 @@ Ensure all frontend dependencies are installed successfully before starting the 
 #### Q8: Do Pocket TTS or the learned world model require CUDA?
 **A:** No. Both supported paths are CPU-capable and no NVIDIA GPU is required. If an optional neural package reports missing Windows runtime DLLs, install the [Microsoft Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and reinstall the relevant daemon extra from 64-bit Python. Only use a CUDA-specific build for an optional model you intentionally configured.
 
-#### Q9: Why did Heliox say an installed application could not be found?
+#### Q9: Why did Zariff say an installed application could not be found?
 **A:** Use the application's installed display name, not a guessed executable
-name. Heliox resolves Start-menu shortcuts, App Paths, PATH, and registered
+name. Zariff resolves Start-menu shortcuts, App Paths, PATH, and registered
 applications on Windows; Launch Services on macOS; and executables or desktop
 entries on Linux. A missing or ambiguous match fails visibly instead of opening
-an unrelated program. After launch, Heliox still observes the target window and
+an unrelated program. After launch, Zariff still observes the target window and
 verifies the requested task before reporting completion.
 
 ## 📖 Developer Guides & Documentation
 
-To help newcomers and contributors navigate the Heliox-OS codebase, please refer to the following comprehensive documentation guides:
+To help newcomers and contributors navigate the Zariff codebase, please refer to the following comprehensive documentation guides:
 
 - 🔍 **[Forensics Agent Runbook](docs/FORENSICS_RUNBOOK.md)** — Learn about the autonomous threat containment pipeline, the JSON schema for forensics logs, and the Tier 3/4 Security Gate.
 - 🧭 **[Architecture](docs/ARCHITECTURE.md)** — Process boundaries and the complete 11-layer ledger, durable-loop, context, companion, world-model, learning, security, harness, and specialist-mesh design.
@@ -871,9 +871,9 @@ To help newcomers and contributors navigate the Heliox-OS codebase, please refer
 We love contributions! Whether it's adding a new gesture, fixing a bug, or building a new plugin, check out our guides to get started.
 
 1. Read our [Contributing Guide](CONTRIBUTING.md) to set up your dev environment.
-2. Check the [Good First Issues](https://github.com/VyomKulshrestha/Heliox-OS/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) tab to find beginner-friendly tasks.
+2. Check the [Good First Issues](https://github.com/NotXeb3c/zariff-2/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) tab to find beginner-friendly tasks.
 3. Review our [Code of Conduct](CODE_OF_CONDUCT.md).
-4. Join the community discussions in [GitHub Discussions](https://github.com/VyomKulshrestha/Heliox-OS/discussions).
+4. Join the community discussions in [GitHub Discussions](https://github.com/NotXeb3c/zariff-2/discussions).
 
 ## License
 

@@ -1,4 +1,4 @@
-﻿"""Peer-to-peer WebSocket connection manager.
+"""Peer-to-peer WebSocket connection manager.
 
 Each ``PeerConnection`` manages a single persistent asyncio WebSocket
 connection to one remote Zariff instance.  Messages are framed as
@@ -124,8 +124,8 @@ class PeerConnection:
         if self._ws:
             try:
                 await self._ws.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("PeerConnection: error closing socket to %s: %s", self.peer_id, exc)
         logger.info("PeerConnection: disconnected from %s", self.peer_id)
 
     async def send(self, msg_type: str, payload: dict[str, Any]) -> None:

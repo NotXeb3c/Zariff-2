@@ -1,4 +1,4 @@
-﻿"""Human-gated reflective strategy evolution for Heliox.
+"""Human-gated reflective strategy evolution for Zariff.
 
 GEPA's useful product pattern is preserved here: full diagnostic feedback
 drives textual candidates, candidates compete on multiple evaluation

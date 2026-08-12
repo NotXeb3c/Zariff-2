@@ -1,6 +1,6 @@
-﻿"""LAN peer discovery via mDNS/DNS-SD (zeroconf).
+"""LAN peer discovery via mDNS/DNS-SD (zeroconf).
 
-Broadcasts a ``_helioxos._tcp.local.`` service record so every Zariff
+Broadcasts a ``_zariff._tcp.local.`` service record so every Zariff
 instance on the same LAN can find each other without any manual configuration.
 
 Usage
@@ -40,7 +40,7 @@ try:
 except ImportError:
     logger.warning("zeroconf not installed — LAN peer discovery disabled. Install with: pip install zeroconf")
 
-_SERVICE_TYPE = "_helioxos._tcp.local."
+_SERVICE_TYPE = "_zariff._tcp.local."
 
 
 @dataclass
@@ -72,7 +72,7 @@ class PeerDiscovery:
         self._service_info: ServiceInfo | None = None
         self._known_peers: dict[str, PeerInfo] = {}
 
-        # Public callbacks — set by HelioxMesh
+        # Public callbacks — set by ZariffMesh
         self.on_peer_found: Callable[[PeerInfo], None] | None = None
         self.on_peer_lost: Callable[[str], None] | None = None
 
@@ -96,7 +96,7 @@ class PeerDiscovery:
         hostname = socket.gethostname()
         local_ip = _get_local_ip()
         vram_free, has_gpu = get_available_vram()
-        service_name = f"helioxos-{self._instance_id}.{_SERVICE_TYPE}"
+        service_name = f"zariff-{self._instance_id}.{_SERVICE_TYPE}"
 
         self._service_info = ServiceInfo(
             type_=_SERVICE_TYPE,
@@ -243,8 +243,8 @@ class PeerDiscovery:
                 self.on_peer_found(peer)
 
         elif state_change is ServiceStateChange.Removed:
-            # Extract peer_id from service name: "helioxos-<id>._helioxos._tcp.local."
-            peer_id = name.split(".")[0].replace("helioxos-", "")
+            # Extract peer_id from service name: "zariff-<id>._zariff._tcp.local."
+            peer_id = name.split(".")[0].replace("zariff-", "")
             if peer_id in self._known_peers:
                 del self._known_peers[peer_id]
                 logger.info("PeerDiscovery: lost peer %s", peer_id)

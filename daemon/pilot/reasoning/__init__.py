@@ -1,1 +1,1 @@
-﻿"""Reasoning event system for Zariff thought visualization."""
+"""Reasoning event system for Zariff thought visualization."""

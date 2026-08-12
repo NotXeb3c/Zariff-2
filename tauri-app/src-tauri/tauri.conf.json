@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Zariff",
-  "version": "0.10.1",
-  "identifier": "com.helioxos.app",
+  "version": "0.10.2",
+  "identifier": "com.zariff.app",
   "build": {
     "frontendDist": "../ui/dist",
     "devUrl": "http://localhost:1420",

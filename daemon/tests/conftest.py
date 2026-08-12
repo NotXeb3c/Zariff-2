@@ -7,9 +7,6 @@ import pytest
 
 from pilot.config import PilotConfig
 
-# Optional safe mocks to prevent heavy dependencies from breaking CI tests
-sys.modules["torch"] = None
-
 
 def pytest_sessionfinish(session, exitstatus):
     """Watchdog to catch and debug test teardown hangs."""

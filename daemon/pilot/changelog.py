@@ -1,4 +1,4 @@
-﻿"""Changelog & Feature Announcements — notifies users of new features."""
+"""Changelog & Feature Announcements — notifies users of new features."""
 
 from __future__ import annotations
 
@@ -10,9 +10,53 @@ from typing import Any
 
 logger = logging.getLogger("pilot.changelog")
 
-VERSION = "0.10.1"
+VERSION = "0.10.2"
 
 CHANGELOG = {
+    "0.10.2": {
+        "title": "Zariff Rebrand and Release Consistency",
+        "date": "2026-08-12",
+        "features": [
+            {
+                "name": "Complete Zariff Rebrand",
+                "description": (
+                    "The published daemon package now ships fully under the Zariff "
+                    "identity, replacing the legacy codebase name throughout the "
+                    "distribution and installer."
+                ),
+                "jarvis_announce": "I am now fully Zariff end to end.",
+            },
+            {
+                "name": "Daemon Reliability Fixes",
+                "description": (
+                    "Fixed a planner fast-path bug that could reference an invalid "
+                    "action, hardened file-path validation against protected "
+                    "directories, and made calendar and cognitive settings merge "
+                    "correctly when updated from the UI."
+                ),
+                "jarvis_announce": "My planning, file safety, and settings are more reliable now.",
+            },
+            {
+                "name": "Release and Package Consistency",
+                "description": (
+                    "Desktop app and daemon now share one synchronized version, the "
+                    "installer pins the matching daemon build, and the Windows "
+                    "release pipeline installs frontend dependencies reproducibly."
+                ),
+                "jarvis_announce": "My installer now always matches the daemon it runs.",
+            },
+            {
+                "name": "Dead-Zone Hand Tracking",
+                "description": (
+                    "Gesture cursor control gained a configurable dead zone that "
+                    "ignores small hand jitter near the sensor origin, so the "
+                    "pointer stays still when your hand should not move it."
+                ),
+                "jarvis_announce": "Gesture cursor movement is now steadier and less twitchy.",
+            },
+        ],
+        "summary": "Zariff branding everywhere, daemon fixes, synchronized installs, and steadier gesture control",
+    },
     "0.10.1": {
         "title": "Reliable Interactive Sessions",
         "date": "2026-07-30",

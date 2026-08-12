@@ -1,5 +1,5 @@
 """UserSupervisionEngine — watches the user's OWN independent screen/keyboard/
-mouse activity, never anything Heliox itself executes (that's ExecutionNarrator's
+mouse activity, never anything Zariff itself executes (that's ExecutionNarrator's
 job, see agents/narrator.py).
 
 Two independent, advisory-only trigger sources evaluated on one internal tick:
@@ -14,8 +14,8 @@ Two independent, advisory-only trigger sources evaluated on one internal tick:
   against `pilot.security.risk_patterns`' small, hardcoded, auditable rule
   table. A match triggers a direct warning.
 
-Both are advisory-only: unlike `ExecutionNarrator`, which gates a Heliox-issued
-plan/action *before it runs* via a real blocking `PendingConfirmation`, Heliox
+Both are advisory-only: unlike `ExecutionNarrator`, which gates a Zariff-issued
+plan/action *before it runs* via a real blocking `PendingConfirmation`, Zariff
 has no way to intercept or block the user's own OS-level input -- it only
 observes a copy via the hook. So these trigger methods return `None`, never
 `bool`, and nothing here registers a confirmation or waits for a response.

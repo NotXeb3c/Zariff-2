@@ -31,7 +31,7 @@ from pilot.actions import Action, ActionPlan, ActionResult
 
 if TYPE_CHECKING:
     from pilot.agents.executor import Executor
-    from pilot.network.mesh import HelioxMesh
+    from pilot.network.mesh import ZariffMesh
 
 logger = logging.getLogger("pilot.network.collab_executor")
 
@@ -45,7 +45,7 @@ class CollabExecutor:
     Parameters
     ----------
     mesh:
-        The ``HelioxMesh`` instance for peer communication.
+        The ``ZariffMesh`` instance for peer communication.
     local_executor:
         The local ``Executor`` used for batches that stay on this machine.
     enabled:
@@ -54,7 +54,7 @@ class CollabExecutor:
 
     def __init__(
         self,
-        mesh: HelioxMesh,
+        mesh: ZariffMesh,
         local_executor: Executor,
         enabled: bool = True,
     ) -> None:
@@ -126,7 +126,7 @@ class CollabExecutor:
         return all_results
 
     async def handle_task_result(self, peer_id: str, payload: dict[str, Any]) -> None:
-        """Called by HelioxMesh when a ``task_result`` message arrives.
+        """Called by ZariffMesh when a ``task_result`` message arrives.
 
         Parameters
         ----------

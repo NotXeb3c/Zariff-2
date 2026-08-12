@@ -1,4 +1,4 @@
-﻿"""Multi-agent router — spawns specialized sub-agents for complex tasks.
+"""Multi-agent router — spawns specialized sub-agents for complex tasks.
 
 Analyzes the user's request and routes it to the most appropriate
 specialized agent (or a combination of agents) for execution.

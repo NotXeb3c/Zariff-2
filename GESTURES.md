@@ -1,6 +1,6 @@
-# 🤚 Heliox OS — Gesture System v3 (30+ Gestures)
+# 🤚 Zariff — Gesture System v3 (30+ Gestures)
 
-Heliox OS includes a state-of-the-art webcam-based hand gesture recognition engine powered by [MediaPipe Hands](https://google.github.io/mediapipe/solutions/hands.html). It supports **30+ gestures** including both static poses and real-time motion tracking.
+Zariff includes a state-of-the-art webcam-based hand gesture recognition engine powered by [MediaPipe Hands](https://google.github.io/mediapipe/solutions/hands.html). It supports **30+ gestures** including both static poses and real-time motion tracking.
 
 ## Architecture
 

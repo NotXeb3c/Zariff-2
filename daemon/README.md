@@ -1,6 +1,6 @@
-# Heliox OS Daemon
+# Zariff Daemon
 
-Python backend for the Heliox OS AI System Control Agent. It provides the
+Python backend for the Zariff AI System Control Agent. It provides the
 append-only experience ledger, durable task loop, temporal context, companion
 coordination, hybrid world model, verified online learning, strategy/evolution
 harnesses, 21-specialist mesh, Planner/Executor/Verifier, security layers, and
@@ -20,7 +20,7 @@ See the [main README](../README.md) and
 
 ## SSH Agent (Remote Host Execution)
 
-Heliox includes an optional `SshAgent` for `ssh_command` and `ssh_script`
+Zariff includes an optional `SshAgent` for `ssh_command` and `ssh_script`
 actions against preconfigured, allowlisted hosts through Paramiko.
 
 ### Install

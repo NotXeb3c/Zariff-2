@@ -1,11 +1,11 @@
-# Contributing to Heliox OS
+# Contributing to Zariff
 
-Thanks for your interest in contributing to Heliox OS! This guide will help you get started.
+Thanks for your interest in contributing to Zariff! This guide will help you get started.
 
 ## 🏗️ Architecture Overview
 
 ```
-heliox-os/
+zariff/
 ├── daemon/                  # Python backend (AI agent system)
 │   └── pilot/
 │       ├── agents/          # Planner, Executor, Verifier, and specialist mesh
@@ -83,8 +83,8 @@ After running the command:
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/VyomKulshrestha/Heliox-OS.git
-cd Heliox-OS
+git clone https://github.com/NotXeb3c/zariff-2.git
+cd zariff-2
 ```
 
 ### 2. Set up the Python daemon
@@ -207,7 +207,7 @@ To ensure a fair and organized environment for all GirlScript Summer of Code (GS
 
 ## 🐛 Reporting Bugs
 
-Please use the [Bug Report template](https://github.com/VyomKulshrestha/Heliox-OS/issues/new?template=bug_report.md) and include:
+Please use the [Bug Report template](https://github.com/NotXeb3c/zariff-2/issues/new?template=bug_report.md) and include:
 
 - OS and version
 - Steps to reproduce
@@ -216,11 +216,11 @@ Please use the [Bug Report template](https://github.com/VyomKulshrestha/Heliox-O
 
 ## 💡 Feature Requests
 
-Use the [Feature Request template](https://github.com/VyomKulshrestha/Heliox-OS/issues/new?template=feature_request.md).
+Use the [Feature Request template](https://github.com/NotXeb3c/zariff-2/issues/new?template=feature_request.md).
 
 ## 🔌 Writing Plugins
 
-Heliox supports signed local plugins and a reviewed public marketplace. Start
+Zariff supports signed local plugins and a reviewed public marketplace. Start
 with the [Plugin Marketplace guide](docs/PLUGIN_MARKETPLACE.md). Marketplace
 packages live under `plugins/<plugin-name>`, declare an explicit capability
 manifest, and must pass:

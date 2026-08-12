@@ -309,6 +309,44 @@ describe("mapCursorTargetToScreen", () => {
       mapCursorTargetToScreen({ x: 0, y: 0 }, 1000, 500, 3),
     );
   });
+
+  it("leaves normal mapping unchanged when dead zone is 0", () => {
+    expect(mapCursorTargetToScreen({ x: 0.25, y: 0.4 }, 1000, 500, 1, 0)).toEqual(
+      mapCursorTargetToScreen({ x: 0.25, y: 0.4 }, 1000, 500, 1),
+    );
+  });
+
+  it("suppresses motion within the dead zone to zero", () => {
+    // Mirrored target: x=0.6 -> mirrored 0.4, offset -0.1; zone 0.1 eats
+    // the entire offset, so the cursor holds at screen centre.
+    expect(mapCursorTargetToScreen({ x: 0.6, y: 0.5 }, 1000, 500, 1, 0.1)).toEqual({
+      x: 500,
+      y: 250,
+    });
+  });
+
+  it("holds a centred landmark at screen centre inside the dead zone", () => {
+    expect(mapCursorTargetToScreen({ x: 0.5, y: 0.5 }, 1000, 500, 1, 0.1)).toEqual({
+      x: 500,
+      y: 250,
+    });
+  });
+
+  it("continues motion from the zone boundary beyond the dead zone", () => {
+    // Mirrored target: x=0.75 -> mirrored 0.25, offset -0.25; zone 0.1
+    // leaves (0.25-0.1)=0.15, so normalizedX=0.35 -> x=350. Same for y
+    // offset +0.25 -> +0.15 -> y=325. Motion is trimmed but not erased.
+    expect(mapCursorTargetToScreen({ x: 0.75, y: 0.75 }, 1000, 500, 1, 0.1)).toEqual({
+      x: 350,
+      y: 325,
+    });
+  });
+
+  it("clamps the dead zone parameter to its supported range", () => {
+    expect(mapCursorTargetToScreen({ x: 0.75, y: 0.75 }, 1000, 500, 1, 5)).toEqual(
+      mapCursorTargetToScreen({ x: 0.75, y: 0.75 }, 1000, 500, 1, 0.2),
+    );
+  });
 });
 
 // Pins exact numeric output for the untouched 2D static-pose path (handSize,

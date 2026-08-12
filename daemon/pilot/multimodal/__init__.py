@@ -1,1 +1,1 @@
-﻿"""Multimodal input package for Zariff."""
+"""Multimodal input package for Zariff."""

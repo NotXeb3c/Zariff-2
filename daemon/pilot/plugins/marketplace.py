@@ -1,4 +1,4 @@
-﻿"""GitHub-backed plugin marketplace catalog and installer.
+"""GitHub-backed plugin marketplace catalog and installer.
 
 The official catalog is read from the public ``main`` branch, so merging an
 approved plugin pull request publishes it without coupling plugin releases to
@@ -26,9 +26,9 @@ from pilot.plugins.capabilities import (
 
 MARKETPLACE_SCHEMA_VERSION = 1
 DEFAULT_MARKETPLACE_REGISTRY_URL = (
-    "https://raw.githubusercontent.com/VyomKulshrestha/Heliox-OS/main/plugins/registry.json"
+    "https://raw.githubusercontent.com/NotXeb3c/zariff-2/main/plugins/registry.json"
 )
-MARKETPLACE_REGISTRY_ENV = "HELIOX_MARKETPLACE_REGISTRY_URL"
+MARKETPLACE_REGISTRY_ENV = "ZARIFF_MARKETPLACE_REGISTRY_URL"
 MAX_CATALOG_BYTES = 1_000_000
 MAX_PLUGIN_FILE_BYTES = 5_000_000
 MAX_PLUGIN_FILES = 64

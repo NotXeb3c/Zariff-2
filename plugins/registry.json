@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "repository": "VyomKulshrestha/Heliox-OS",
+  "repository": "NotXeb3c/zariff-2",
   "ref": "main",
-  "submission_url": "https://github.com/VyomKulshrestha/Heliox-OS/blob/main/docs/PLUGIN_MARKETPLACE.md",
+  "submission_url": "https://github.com/NotXeb3c/zariff-2/blob/main/docs/PLUGIN_MARKETPLACE.md",
   "plugins": [
     {
       "name": "home-assistant",
       "description": "Control smart home devices via Home Assistant API",
       "version": "1.0.0",
-      "author": "VyomKulshrestha",
-      "url": "https://github.com/VyomKulshrestha/Heliox-OS/tree/main/plugins/home-assistant",
+      "author": "NotXeb3c",
+      "url": "https://github.com/NotXeb3c/zariff-2/tree/main/plugins/home-assistant",
       "tools": [
         {
           "name": "ha_lights",
@@ -67,7 +67,7 @@
         "files": [
           {
             "path": "manifest.json",
-            "sha256": "6169a778c556b9238ab92c2f729b7101753aaf217dc97d9465132b5d84c65dca"
+            "sha256": "94f1532b42d33db44e2931fb61da7ffaf8354c67d3f684998484f76876e0387c"
           },
           {
             "path": "plugin.py",
@@ -81,7 +81,7 @@
       "description": "Control Spotify playback through the Spotify Web API",
       "version": "1.0.0",
       "author": "community",
-      "url": "https://github.com/VyomKulshrestha/Heliox-OS/tree/main/plugins/spotify-control",
+      "url": "https://github.com/NotXeb3c/zariff-2/tree/main/plugins/spotify-control",
       "tools": [
         {
           "name": "spotify_play",
@@ -161,7 +161,7 @@
       "description": "Get live current weather and forecasts from wttr.in",
       "version": "1.0.0",
       "author": "community",
-      "url": "https://github.com/VyomKulshrestha/Heliox-OS/tree/main/plugins/weather",
+      "url": "https://github.com/NotXeb3c/zariff-2/tree/main/plugins/weather",
       "tools": [
         {
           "name": "get_weather",
@@ -223,7 +223,7 @@
           },
           {
             "path": "plugin.py",
-            "sha256": "47fb24a0edea42f28c7f64bb7790782991ef0a66d1f4fb82eabb7d9f6e0a073d"
+            "sha256": "d9ad0c2a282095bd27aee70c59cbc0806ec0f94d3d352d40b366f57ae9f0d214"
           }
         ]
       }

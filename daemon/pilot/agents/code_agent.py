@@ -1,4 +1,4 @@
-﻿"""Code Agent — handles code generation, execution, and debugging.
+"""Code Agent — handles code generation, execution, and debugging.
 
 Specializes in understanding code-related tasks: writing scripts,
 running code snippets, debugging errors, testing, and managing

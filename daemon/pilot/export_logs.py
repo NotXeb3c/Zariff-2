@@ -1,4 +1,4 @@
-﻿"""export_logs.py — Bundles logs, config, and audit trails into a zip for bug reports."""
+"""export_logs.py — Bundles logs, config, and audit trails into a zip for bug reports."""
 
 from __future__ import annotations
 

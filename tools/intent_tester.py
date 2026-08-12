@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-intent_tester.py — Offline Intent Tester CLI for Heliox OS
+intent_tester.py — Offline Intent Tester CLI for Zariff
 
-A lightweight developer diagnostic tool that tests how Heliox OS interprets
+A lightweight developer diagnostic tool that tests how Zariff interprets
 voice and gesture commands — without needing the daemon or Tauri frontend.
 
 Usage:
@@ -41,7 +41,7 @@ except ImportError:
 DAEMON_PATH = Path(__file__).resolve().parent.parent / "daemon"
 sys.path.insert(0, str(DAEMON_PATH))
 
-# ── Import Heliox OS internals ──
+# ── Import Zariff internals ──
 try:
     from pilot.multimodal.fusion import (
         MultimodalFusionEngine,
@@ -325,8 +325,8 @@ def print_result_json(
 async def test_single(args: argparse.Namespace) -> None:
     """Test a single voice (+ optional gesture) command."""
     if not FUSION_AVAILABLE:
-        msg = f"Could not import Heliox OS modules: {IMPORT_ERROR}\n"
-        msg += "Make sure you're running from the Heliox-OS root directory."
+        msg = f"Could not import Zariff modules: {IMPORT_ERROR}\n"
+        msg += "Make sure you're running from the Zariff root directory."
         if RICH_AVAILABLE:
             console.print(f"[bold red]❌ Import Error:[/bold red] {msg}")
         else:
@@ -462,7 +462,7 @@ def list_gestures() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="intent_tester",
-        description="🧪 Heliox OS — Offline Intent Tester CLI",
+        description="🧪 Zariff — Offline Intent Tester CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

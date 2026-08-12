@@ -25,7 +25,7 @@ logger = logging.getLogger("pilot.cognitive.evolving_persona")
 
 # ── Configuration ──
 
-DATA_DIR = Path.home() / ".cache" / "heliox" / "persona"
+DATA_DIR = Path.home() / ".cache" / "zariff" / "persona"
 AVATAR_UPDATE_INTERVAL_HOURS = 24  # Update avatar once per day
 PREFERENCE_DECAY = 0.95  # Older preferences fade
 MIN_INTERACTIONS_FOR_PATTERN = 10

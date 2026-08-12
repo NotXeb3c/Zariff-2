@@ -1,4 +1,4 @@
-﻿"""Task Decomposition Engine — breaks complex goals into executable subtasks.
+"""Task Decomposition Engine — breaks complex goals into executable subtasks.
 
 Complex user requests are decomposed into a tree of subtasks, each with
 dependencies, estimated complexity, and the assigned agent.

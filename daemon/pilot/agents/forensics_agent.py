@@ -1,4 +1,4 @@
-﻿"""Forensics Agent — parses logs, inspects event sequences, and detects anomalies.
+"""Forensics Agent — parses logs, inspects event sequences, and detects anomalies.
 
 When a completed analysis returns a JSON report with ``"severity": "CRITICAL"``
 the attached :class:`~pilot.agents.threat_containment.ThreatContainmentBridge`

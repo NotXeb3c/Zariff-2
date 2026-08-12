@@ -221,14 +221,14 @@ async def keyboard_hold(key: str, duration: float = 0.5) -> str:
 async def screen_size() -> str:
     """Get screen resolution."""
     pag = _ensure_pyautogui()
-    w, h = pag.size()
+    w, h = await asyncio.to_thread(pag.size)
     return f"Screen resolution: {w}x{h}"
 
 
 async def pixel_color(x: int, y: int) -> str:
     """Get the color of a pixel at coordinates."""
     pag = _ensure_pyautogui()
-    r, g, b = pag.pixel(x, y)
+    r, g, b = await asyncio.to_thread(pag.pixel, x, y)
     return f"Pixel at ({x},{y}): RGB({r},{g},{b}) / #{r:02x}{g:02x}{b:02x}"
 
 

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an improvement or new capability for Heliox OS
+about: Suggest an improvement or new capability for Zariff
 title: "[Feature] "
 labels: enhancement
 assignees: ''

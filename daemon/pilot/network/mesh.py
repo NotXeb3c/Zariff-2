@@ -1,4 +1,4 @@
-"""HelioxMesh — LAN mesh orchestrator.
+"""ZariffMesh — LAN mesh orchestrator.
 
 Ties together peer discovery, peer connections, skill sync, and
 collaborative execution into a single object that ``PilotServer``
@@ -6,7 +6,7 @@ starts and stops alongside the main WebSocket server.
 
 Lifecycle
 ---------
-    mesh = HelioxMesh(config, executor, plugin_manager)
+    mesh = ZariffMesh(config, executor, plugin_manager)
     await mesh.start()          # begins mDNS advertising + browsing
     ...
     await mesh.stop()           # deregisters mDNS, closes all connections
@@ -14,7 +14,7 @@ Lifecycle
 Architecture
 ------------
                     ┌─────────────────────────────────┐
-                    │           HelioxMesh             │
+                    │           ZariffMesh             │
                     │                                  │
     mDNS ──────────►│  PeerDiscovery                   │
                     │      │ on_peer_found              │
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("pilot.network.mesh")
 
 
-class HelioxMesh:
+class ZariffMesh:
     """Central coordinator for the LAN mesh network.
 
     Parameters
@@ -128,7 +128,7 @@ class HelioxMesh:
         asyncio.create_task(self._periodic_capability_update())
 
         logger.info(
-            "HelioxMesh started (instance=%s, port=%d)",
+            "ZariffMesh started (instance=%s, port=%d)",
             self._instance_id,
             self._config.port,
         )
@@ -151,7 +151,7 @@ class HelioxMesh:
             self._p2p_server.close()
             await self._p2p_server.wait_closed()
 
-        logger.info("HelioxMesh stopped")
+        logger.info("ZariffMesh stopped")
 
     # ── Messaging ─────────────────────────────────────────────────────────────
 
@@ -166,7 +166,7 @@ class HelioxMesh:
         if conn and conn.connected:
             await conn.send(msg_type, payload)
         else:
-            logger.warning("HelioxMesh.send_to: peer %s not connected", peer_id)
+            logger.warning("ZariffMesh.send_to: peer %s not connected", peer_id)
 
     # ── Peer events ───────────────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ class HelioxMesh:
         conn = self._connections.pop(peer_id, None)
         if conn:
             asyncio.ensure_future(conn.disconnect())
-        logger.info("HelioxMesh: peer %s left the mesh", peer_id)
+        logger.info("ZariffMesh: peer %s left the mesh", peer_id)
 
     async def _connect_to_peer(self, peer_info: Any) -> None:
         """Establish an outbound connection to a newly discovered peer."""
@@ -199,7 +199,7 @@ class HelioxMesh:
         success = await conn.connect()
         if success:
             self._connections[peer_id] = conn
-            logger.info("HelioxMesh: joined mesh with peer %s", peer_id)
+            logger.info("ZariffMesh: joined mesh with peer %s", peer_id)
 
             # Broadcast our loaded plugins to the new peer
             if self._config.skill_sync_enabled and self._skill_sync:
@@ -220,12 +220,12 @@ class HelioxMesh:
 
             # 2. Update connected peers via P2P
             await self.broadcast("peer_info", caps.__dict__)
-            logger.debug("HelioxMesh: broadcasted updated capabilities (VRAM: %.1f MB)", caps.vram_free / 1024**2)
+            logger.debug("ZariffMesh: broadcasted updated capabilities (VRAM: %.1f MB)", caps.vram_free / 1024**2)
 
     def _on_connection_lost(self, peer_id: str) -> None:
         """Called by PeerConnection when a connection drops unexpectedly."""
         self._connections.pop(peer_id, None)
-        logger.info("HelioxMesh: connection to peer %s lost", peer_id)
+        logger.info("ZariffMesh: connection to peer %s lost", peer_id)
 
     # ── Message routing ───────────────────────────────────────────────────────
 
@@ -237,7 +237,7 @@ class HelioxMesh:
 
         elif msg_type == "skill_ack":
             logger.info(
-                "HelioxMesh: peer %s acknowledged plugin '%s' (%s)",
+                "ZariffMesh: peer %s acknowledged plugin '%s' (%s)",
                 peer_id,
                 payload.get("name"),
                 payload.get("status"),
@@ -251,7 +251,7 @@ class HelioxMesh:
                 await self._collab.handle_task_result(peer_id, payload)
 
         else:
-            logger.debug("HelioxMesh: unhandled message type '%s' from %s", msg_type, peer_id)
+            logger.debug("ZariffMesh: unhandled message type '%s' from %s", msg_type, peer_id)
 
     # ── Inbound P2P server ────────────────────────────────────────────────────
 
@@ -265,9 +265,9 @@ class HelioxMesh:
                 "0.0.0.0",
                 self._config.port,
             )
-            logger.info("HelioxMesh: P2P server listening on port %d", self._config.port)
+            logger.info("ZariffMesh: P2P server listening on port %d", self._config.port)
         except Exception as exc:
-            logger.error("HelioxMesh: failed to start P2P server: %s", exc)
+            logger.error("ZariffMesh: failed to start P2P server: %s", exc)
 
     async def _handle_inbound_peer(self, websocket: Any) -> None:
         """Handle an inbound WebSocket connection from a peer."""
@@ -297,13 +297,13 @@ class HelioxMesh:
                         conn._ws = websocket
                         conn._connected = True
                         self._connections[peer_id] = conn
-                        logger.info("HelioxMesh: inbound peer %s connected", peer_id)
+                        logger.info("ZariffMesh: inbound peer %s connected", peer_id)
                     continue
 
                 if peer_id:
                     await self._on_peer_message(peer_id, msg_type, payload)
         except Exception as exc:
-            logger.debug("HelioxMesh: inbound peer connection closed: %s", exc)
+            logger.debug("ZariffMesh: inbound peer connection closed: %s", exc)
         finally:
             if peer_id:
                 self._connections.pop(peer_id, None)
@@ -323,7 +323,7 @@ class HelioxMesh:
         try:
             actions = [Action.model_validate(a) for a in raw_actions]
         except Exception as exc:
-            logger.warning("HelioxMesh: failed to deserialise delegated actions: %s", exc)
+            logger.warning("ZariffMesh: failed to deserialise delegated actions: %s", exc)
             await self.send_to(peer_id, "task_result", {"task_id": task_id, "results": []})
             return
 
@@ -333,7 +333,7 @@ class HelioxMesh:
         serialised = [r.model_dump(mode="json") for r in results]
         await self.send_to(peer_id, "task_result", {"task_id": task_id, "results": serialised})
         logger.info(
-            "HelioxMesh: completed delegated task %s for peer %s (%d results)",
+            "ZariffMesh: completed delegated task %s for peer %s (%d results)",
             task_id,
             peer_id,
             len(results),

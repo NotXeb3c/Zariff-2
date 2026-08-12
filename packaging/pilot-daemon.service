@@ -1,6 +1,6 @@
 [Unit]
-Description=Heliox OS Pilot Daemon - AI System Control Agent
-Documentation=https://github.com/VyomKulshrestha/Heliox-OS
+Description=Zariff Pilot Daemon - AI System Control Agent
+Documentation=https://github.com/NotXeb3c/zariff-2
 After=network.target
 
 [Service]

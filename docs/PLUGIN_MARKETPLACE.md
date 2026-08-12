@@ -1,7 +1,7 @@
 # Heliox Plugin Marketplace
 
 Heliox publishes plugins through reviewed pull requests to the public
-[`VyomKulshrestha/Heliox-OS`](https://github.com/VyomKulshrestha/Heliox-OS)
+[`NotXeb3c/zariff-2`](https://github.com/NotXeb3c/zariff-2)
 repository. The app reads the approved catalog from `main`, so merging a plugin
 pull request publishes it to the marketplace. A new desktop release is not
 required.

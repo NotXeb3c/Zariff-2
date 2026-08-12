@@ -1,4 +1,4 @@
-﻿"""Destructive Critic Agent â€” safety reviewer for Tier 4 (ROOT_CRITICAL) plans.
+"""Destructive Critic Agent â€” safety reviewer for Tier 4 (ROOT_CRITICAL) plans.
 
 For any plan that contains Tier 4 destructive actions, the orchestration
 pipeline runs a two-agent handshake:

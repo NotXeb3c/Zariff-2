@@ -1,4 +1,4 @@
-﻿"""Email Agent — reads and sends emails via IMAP/SMTP using App Passwords.
+"""Email Agent — reads and sends emails via IMAP/SMTP using App Passwords.
 
 Specialises in:
   - Fetching unread emails securely over IMAP (SSL)

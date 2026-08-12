@@ -1,4 +1,4 @@
-﻿"""Monitor Agent — runs background monitoring tasks (CPU, disk, network).
+"""Monitor Agent — runs background monitoring tasks (CPU, disk, network).
 
 Wraps the existing BackgroundTaskManager and extends it with
 agent-protocol compliance: structured messaging, orchestrator

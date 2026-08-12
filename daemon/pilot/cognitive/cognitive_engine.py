@@ -1,4 +1,4 @@
-﻿"""CognitiveEngine — lightweight, dependency-free cognitive state estimator.
+"""CognitiveEngine — lightweight, dependency-free cognitive state estimator.
 
 Estimates attention/stress/cognitive-load from local signals only: recency-
 decayed interaction history (event frequency, intensity, and diversity),

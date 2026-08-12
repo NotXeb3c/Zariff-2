@@ -1,4 +1,4 @@
-﻿"""SSH Agent — executes remote bash commands over SSH using Paramiko.
+"""SSH Agent — executes remote bash commands over SSH using Paramiko.
 
 This agent is intentionally constrained:
   - It only connects to host aliases configured in config.ssh.allowed_hosts

@@ -1,4 +1,4 @@
-﻿"""Swarm Router Agent - dispatches tasks to appropriate daemon nodes based on hardware requirements."""
+"""Swarm Router Agent - dispatches tasks to appropriate daemon nodes based on hardware requirements."""
 
 import logging
 from typing import TYPE_CHECKING, Any

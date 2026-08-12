@@ -26,16 +26,16 @@ from pilot.config import (
 class TestConfigConstants:
     """All path constants must be consistent and predictable."""
 
-    def test_config_dir_is_heliox_os(self):
-        assert CONFIG_DIR.name == "heliox-os"
+    def test_config_dir_is_zariff(self):
+        assert CONFIG_DIR.name == "zariff"
         assert ".config" in str(CONFIG_DIR)
 
-    def test_data_dir_is_heliox_os(self):
-        assert DATA_DIR.name == "heliox-os"
+    def test_data_dir_is_zariff(self):
+        assert DATA_DIR.name == "zariff"
         assert ".local" in str(DATA_DIR)
 
-    def test_state_dir_is_heliox_os(self):
-        assert STATE_DIR.name == "heliox-os"
+    def test_state_dir_is_zariff(self):
+        assert STATE_DIR.name == "zariff"
 
     def test_plugins_dir_under_config_dir(self):
         assert PLUGINS_DIR.parent == CONFIG_DIR

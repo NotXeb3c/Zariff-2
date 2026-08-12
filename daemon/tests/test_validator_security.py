@@ -54,3 +54,44 @@ def test_protected_folder_bypass_mitigated(validator):
         with pytest.raises(Exception) as excinfo:
             validator.validate_action(action, 0)
         assert "is in protected folder" in str(excinfo.value)
+
+
+def test_protected_folder_exact_match_rejected(validator):
+    action = Action(
+        action_type=ActionType.FILE_DELETE,
+        target="/protected",
+        parameters=FileParams(path="/protected"),
+    )
+    with pytest.raises(Exception) as excinfo:
+        validator.validate_action(action, 0)
+    assert "is in protected folder" in str(excinfo.value)
+
+
+def test_protected_folder_sibling_prefix_allowed(validator):
+    # /protectedEvil shares a string prefix but is NOT inside /protected
+    action = Action(
+        action_type=ActionType.FILE_DELETE,
+        target="/protectedEvil/notes.txt",
+        parameters=FileParams(path="/protectedEvil/notes.txt"),
+        destructive=True,
+    )
+    try:
+        validator.validate_action(action, 0)
+    except Exception as exc:
+        assert "is in protected folder" not in str(exc)
+
+
+def test_protected_folder_case_bypass_mitigated(validator):
+    # On Windows the path comparison must be case-insensitive
+    config = PilotConfig()
+    config.restrictions.protected_folders = ["C:\\Users\\bob\\Docs"]
+    validator = ActionValidator(config)
+    action = Action(
+        action_type=ActionType.FILE_DELETE,
+        target=r"c:\USERS\bob\docs\secret.txt",
+        parameters=FileParams(path=r"c:\USERS\bob\docs\secret.txt"),
+    )
+    if os.name == "nt":
+        with pytest.raises(Exception) as excinfo:
+            validator.validate_action(action, 0)
+        assert "is in protected folder" in str(excinfo.value)

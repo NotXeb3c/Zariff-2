@@ -31,23 +31,23 @@ def _default_runtime_dir() -> Path:
     """Resolve runtime dir when XDG_RUNTIME_DIR is unset (macOS, Windows, minimal Linux)."""
     xdg = os.environ.get("XDG_RUNTIME_DIR", "").strip()
     if xdg:
-        return Path(xdg) / "heliox-os"
+        return Path(xdg) / "zariff"
     uid = os.getuid() if hasattr(os, "getuid") else 1000
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Caches" / "heliox-os" / "runtime"
+        return Path.home() / "Library" / "Caches" / "zariff" / "runtime"
     if sys.platform == "win32":
         local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-        return Path(local) / "heliox-os" / "runtime"
+        return Path(local) / "zariff" / "runtime"
     run_user = Path(f"/run/user/{uid}")
     if run_user.is_dir() and os.access(run_user, os.W_OK):
-        return run_user / "heliox-os"
+        return run_user / "zariff"
     tmp = os.environ.get("TMPDIR", "/tmp")
-    return Path(tmp) / f"heliox-os-runtime-{uid}"
+    return Path(tmp) / f"zariff-runtime-{uid}"
 
 
-CONFIG_DIR = _xdg("XDG_CONFIG_HOME", ".config") / "heliox-os"
-DATA_DIR = _xdg("XDG_DATA_HOME", ".local/share") / "heliox-os"
-STATE_DIR = _xdg("XDG_STATE_HOME", ".local/state") / "heliox-os"
+CONFIG_DIR = _xdg("XDG_CONFIG_HOME", ".config") / "zariff"
+DATA_DIR = _xdg("XDG_DATA_HOME", ".local/share") / "zariff"
+STATE_DIR = _xdg("XDG_STATE_HOME", ".local/state") / "zariff"
 RUNTIME_DIR = _default_runtime_dir()
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 RESTRICTIONS_FILE = CONFIG_DIR / "restrictions.toml"
@@ -214,6 +214,12 @@ class GestureCursorConfig:
     # motion (see spatialModel.test.ts), so a small blend avoids overshoot
     # until this is tuned against real camera data.
     blend: float = 0.3
+    # Normalized radius (0.0–0.2) around the frame centre inside which tiny
+    # hand tremor does not move the cursor — a real dead-zone, not just
+    # smoothing. Landmarks outside the zone map normally; landmarks inside
+    # are clamped to the zone boundary so the cursor stops cleanly instead
+    # of stuttering. 0.0 disables the zone entirely.
+    dead_zone: float = 0.0
 
 
 @dataclass
@@ -664,6 +670,7 @@ def _validate_config_types(raw: dict) -> None:
             "sensitivity": (int, float),
             "prediction_ms": (int, float),
             "blend": (int, float),
+            "dead_zone": (int, float),
         },
         "adaptive_calibration": {
             "gesture_enabled": bool,
@@ -758,6 +765,16 @@ def _validate_config_types(raw: dict) -> None:
             "http": str,
             "https": str,
             "no_proxy": str,
+        },
+        "calendar": {
+            "enabled": bool,
+            "caldav_url": str,
+            "caldav_username": str,
+            "caldav_password_provider": str,
+            "ics_files": list,
+        },
+        "cognitive": {
+            "enabled": bool,
         },
     }
 
@@ -1030,6 +1047,16 @@ def _merge_config(config: PilotConfig, raw: dict[str, Any]) -> PilotConfig:
         for k, v in raw["semantic_search"].items():
             if hasattr(config.semantic_search, k):
                 setattr(config.semantic_search, k, v)
+
+    if "calendar" in raw:
+        for k, v in raw["calendar"].items():
+            if hasattr(config.calendar, k):
+                setattr(config.calendar, k, v)
+
+    if "cognitive" in raw:
+        for k, v in raw["cognitive"].items():
+            if hasattr(config.cognitive, k):
+                setattr(config.cognitive, k, v)
 
     if "proxy" in raw and isinstance(raw["proxy"], dict):
         for k, v in raw["proxy"].items():

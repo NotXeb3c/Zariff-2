@@ -1,4 +1,4 @@
-﻿"""Executor agent — executes validated action plans via system interfaces.
+"""Executor agent — executes validated action plans via system interfaces.
 
 The Executor ONLY accepts validated Action objects. It dispatches each action
 to the appropriate system interface module based on action_type.
@@ -1261,7 +1261,7 @@ class Executor:
                             },
                         )
                 except Exception:
-                    pass
+                    logger.warning("Failed to announce stress-gate approval risk", exc_info=True)
                 await asyncio.sleep(10)
                 # After 10s pause, proceed with execution
 
@@ -1658,25 +1658,23 @@ class Executor:
                 import psutil
 
                 try:
-                    # wait up to 3 seconds for it to exit
-                    psutil.Process(params.pid).wait(timeout=3.0)
+                    # wait up to 3 seconds for it to exit (off the event loop)
+                    await asyncio.to_thread(psutil.Process(params.pid).wait, timeout=3.0)
                 except psutil.NoSuchProcess:
                     pass
                 except Exception:
                     # If timeout expired or access denied
-                    import asyncio
-
                     await asyncio.sleep(0.5)
             except Exception:
                 # If psutil is missing
-                import asyncio
-
                 await asyncio.sleep(0.5)
 
         # 4. Quarantine and Defang AFTER killing (avoids file locks on Windows)
         if exe_path_to_quarantine and os.path.exists(exe_path_to_quarantine):
             try:
-                quarantine_dir = os.path.expanduser("~/.heliox/quarantine")
+                from pilot.config import DATA_DIR
+
+                quarantine_dir = DATA_DIR / "quarantine"
                 os.makedirs(quarantine_dir, exist_ok=True)
 
                 base_name = os.path.basename(exe_path_to_quarantine)
@@ -1684,7 +1682,7 @@ class Executor:
                 quarantine_filename = f"{base_name}_{timestamp}"
                 quarantine_path = os.path.join(quarantine_dir, quarantine_filename)
 
-                shutil.move(exe_path_to_quarantine, quarantine_path)
+                await asyncio.to_thread(shutil.move, exe_path_to_quarantine, quarantine_path)
                 os.chmod(quarantine_path, 0o600)
 
                 quarantine_log = f"\n[Quarantine Vault] Traced PID {params.pid} to {exe_path_to_quarantine}. Moved to {quarantine_path} and stripped permissions."

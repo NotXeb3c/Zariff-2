@@ -352,11 +352,13 @@
     // frame — flip x so cursor motion matches what the user sees (moving
     // their hand right visually moves the cursor right).
     const sensitivity = $settings.gesture_cursor?.sensitivity ?? 1;
+    const deadZone = $settings.gesture_cursor?.dead_zone ?? 0;
     const { x: screenX, y: screenY } = mapCursorTargetToScreen(
       target,
       window.screen.width,
       window.screen.height,
       sensitivity,
+      deadZone,
     );
     lastCursorX = screenX;
     lastCursorY = screenY;

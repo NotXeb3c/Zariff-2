@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { call } from "../api/daemon";
 
   interface PluginTool {
@@ -48,7 +48,7 @@
   let uninstalling = $state<string | null>(null);
   let marketplaceSource = $state<"github" | "bundled" | "">("");
   let marketplaceWarning = $state("");
-  let submissionUrl = $state("https://github.com/VyomKulshrestha/Heliox-OS/blob/main/docs/PLUGIN_MARKETPLACE.md");
+  let submissionUrl = $state("https://github.com/NotXeb3c/zariff-2/blob/main/docs/PLUGIN_MARKETPLACE.md");
   let showPublishingGuide = $state(false);
 
   // Tool execution
@@ -305,7 +305,7 @@
       </div>
       <ol>
         <li>Create and test the plugin locally.</li>
-        <li>Fork <code>VyomKulshrestha/Heliox-OS</code> on GitHub.</li>
+        <li>Fork <code>NotXeb3c/zariff-2</code> on GitHub.</li>
         <li>Add <code>plugins/&lt;plugin-name&gt;/manifest.json</code> and <code>plugin.py</code>.</li>
         <li>Run <code>python scripts/validate_marketplace.py --write</code>.</li>
         <li>Open a pull request. CI validates paths, hashes, manifests, and code policy.</li>

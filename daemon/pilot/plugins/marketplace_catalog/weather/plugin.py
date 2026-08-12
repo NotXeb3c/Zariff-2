@@ -1,4 +1,4 @@
-﻿"""Official Heliox weather marketplace plugin."""
+"""Official Heliox weather marketplace plugin."""
 
 from __future__ import annotations
 

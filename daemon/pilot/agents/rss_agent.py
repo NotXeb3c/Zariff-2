@@ -1,4 +1,4 @@
-﻿"""RSS/Atom feed polling agent with background news summarization."""
+"""RSS/Atom feed polling agent with background news summarization."""
 
 from __future__ import annotations
 

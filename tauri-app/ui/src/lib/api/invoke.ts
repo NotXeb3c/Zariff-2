@@ -1,4 +1,4 @@
-﻿import uiPackage from "../../../package.json";
+import uiPackage from "../../../package.json";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 const HELIOX_VERSION = uiPackage.version;
@@ -92,7 +92,7 @@ export async function invoke<T = any>(command: string, args?: any): Promise<T> {
     return [
       {
         title: `Zariff v${HELIOX_VERSION} Current Build`,
-        url: "https://github.com/VyomKulshrestha/Heliox-OS/releases",
+        url: "https://github.com/NotXeb3c/zariff-2/releases",
         source: "Current Build",
       },
     ] as unknown as T;

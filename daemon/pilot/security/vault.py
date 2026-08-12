@@ -1,4 +1,4 @@
-﻿"""API-key storage backed exclusively by the operating system keyring.
+"""API-key storage backed exclusively by the operating system keyring.
 
 Heliox intentionally fails closed when no secure credential backend is
 available. Older releases used a machine-identifier-derived encrypted file;

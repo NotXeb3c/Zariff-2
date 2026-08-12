@@ -192,6 +192,7 @@ class MemoryStore:
 
     async def _cluster_and_prune(self, router: ModelRouter) -> None:
         """Background task to cluster semantic memories and prune redundancies."""
+        """Identify semantic clusters in ChromaDB, summarize, and prune SQLite/Chroma."""
         try:
             import numpy as np
             from sklearn.cluster import DBSCAN
@@ -199,7 +200,6 @@ class MemoryStore:
             logger.warning("Optional dependencies 'numpy' or 'scikit-learn' missing. Semantic pruning disabled.")
             return
 
-        """Identify semantic clusters in ChromaDB, summarize, and prune SQLite/Chroma."""
         if self._chroma_collection is None or not self._pool:
             return
 
@@ -222,7 +222,7 @@ class MemoryStore:
         # 2. Apply Clustering (e.g., DBSCAN via scikit-learn)
         X = np.array(embeddings)
         # eps defines the semantic proximity threshold
-        clustering = DBSCAN(eps=0.3, min_samples=3, metric="cosine").fit(X)
+        clustering = await asyncio.to_thread(DBSCAN(eps=0.3, min_samples=3, metric="cosine").fit, X)
 
         # 3. Process each cluster
         clusters = set(clustering.labels_)

@@ -1,4 +1,4 @@
-﻿"""Safe, explicit Windows elevation handoff for the Heliox daemon."""
+"""Safe, explicit Windows elevation handoff for the Heliox daemon."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ def replace_existing_daemon(
         for part in command_line
     )
     if not is_pilot_daemon:
-        raise ElevationError("Refusing to stop a process that is not the Zariff daemon.")
+        raise ElevationError("Refusing to stop a process that is not the Heliox daemon.")
 
     if response_grace_seconds > 0:
         time.sleep(response_grace_seconds)

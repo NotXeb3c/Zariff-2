@@ -1,4 +1,4 @@
-﻿"""Independent plan reviewer for Heliox's interactive execution loop.
+"""Independent plan reviewer for Zariff's interactive execution loop.
 
 The planner proposes work; this companion reviews the proposal from the
 user's point of view before any action runs. It has no execution capability

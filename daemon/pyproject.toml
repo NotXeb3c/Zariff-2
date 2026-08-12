@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pilot-daemon"
-version = "0.10.1"
+version = "0.10.2"
 description = "AI-powered autonomous computer agent — full system control"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,10 +22,10 @@ dependencies = [
     "keyring>=25.0",
     "psutil>=5.9",
     "tiktoken>=0.7",
-    "numpy==2.2.6",
-    "scipy>=1.14.1,<1.16",
+    "numpy>=2.2.6",
+    "scipy>=1.14.1,<1.19",
     "scikit-learn>=1.3.0",
-    "river==0.23.0",
+    "river>=0.23.0,<0.26",
     "icalendar>=5.0.0",
     "caldav>=1.0.0",
 ]

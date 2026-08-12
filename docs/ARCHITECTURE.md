@@ -1,4 +1,4 @@
-# Heliox OS Architecture
+# Zariff Architecture
 
 This document describes the implemented v0.10.1 runtime. It is an architecture
 contract, not a roadmap. Exact action values live in
@@ -7,7 +7,7 @@ contract, not a roadmap. Exact action values live in
 
 ## System boundaries
 
-Heliox is split into three trust boundaries:
+Zariff is split into three trust boundaries:
 
 1. **Tauri desktop shell and Svelte UI** collect explicit text, voice, gesture,
    gaze, camera, and settings input. The UI is not the execution authority.
@@ -117,7 +117,7 @@ replans without repeating already verified actions.
 Continuous conversation is explicit and bounded. While the listener is on,
 complete utterances are eligible for routing without a wake phrase, and a
 30-second follow-up window opens after speech completes. The listener is
-suppressed while Heliox itself speaks so TTS cannot become a new command.
+suppressed while Zariff itself speaks so TTS cannot become a new command.
 
 ### 6. Hybrid world model
 
@@ -246,7 +246,7 @@ ambiguous target fails instead of guessing. Three repeats of the same plan and
 screen fingerprint stop the loop as no progress.
 
 Native application control carries a target-window identity across rounds.
-Before foreground mouse or keyboard input, Heliox re-acquires that window;
+Before foreground mouse or keyboard input, Zariff re-acquires that window;
 background text entry includes `KeyboardParams.window_title` and fails if the
 target cannot be focused or its editable text cannot be verified. Application
 launch is platform-specific and fail-closed: Windows resolves Start-menu,

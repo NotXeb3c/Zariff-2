@@ -1,4 +1,4 @@
-﻿"""Gesture Recognition — Hand gesture detection via webcam.
+"""Gesture Recognition — Hand gesture detection via webcam.
 
 Uses MediaPipe Hands if available, falls back to a stub.
 Detected gestures are mapped to Zariff actions.

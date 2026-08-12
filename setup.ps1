@@ -1,6 +1,6 @@
-# setup.ps1 - Heliox OS Windows Development Environment Setup
+# setup.ps1 - Zariff Windows Development Environment Setup
 #
-# This script automates the setup of the Heliox OS development environment.
+# This script automates the setup of the Zariff development environment.
 #
 # It installs and configures:
 #   - Chocolatey
@@ -183,7 +183,7 @@ function Initialize-PythonVenv {
 
     if (-not (Test-Path $daemonDir)) {
         Write-Err "Daemon directory not found at: $daemonDir"
-        Write-Err "Please run this script from the root of the Heliox OS repository."
+        Write-Err "Please run this script from the root of the Zariff repository."
         exit 1
     }
 
@@ -305,7 +305,7 @@ function Initialize-NpmPackages {
 
     if (-not (Test-Path $uiDir)) {
         Write-Err "UI directory not found at: $uiDir"
-        Write-Err "Please run this script from the root of the Heliox OS repository."
+        Write-Err "Please run this script from the root of the Zariff repository."
         exit 1
     }
 
@@ -474,7 +474,7 @@ function Initialize-TauriCli {
 Confirm-AdminPrivileges
 Initialize-Chocolatey
 
-Write-Info "Starting Heliox OS development environment setup..."
+Write-Info "Starting Zariff development environment setup..."
 
 Initialize-Python
 Initialize-PythonVenv

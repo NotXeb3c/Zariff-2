@@ -46,6 +46,8 @@ async def test_preview_enabled_update_is_applied_and_saved():
         ({"sensitivity": 0}, "sensitivity must be from 0.1 to 3"),
         ({"prediction_ms": 251}, "prediction_ms must be from 0 to 250"),
         ({"blend": 1.1}, "blend must be from 0 to 1"),
+        ({"dead_zone": -0.01}, "dead_zone must be from 0 to 0.2"),
+        ({"dead_zone": 0.21}, "dead_zone must be from 0 to 0.2"),
     ],
 )
 async def test_gesture_cursor_update_rejects_invalid_values(values, message):
@@ -72,7 +74,7 @@ async def test_gesture_cursor_update_applies_runtime_tuning():
     result = await server._handle_update_config(
         {
             "section": "gesture_cursor",
-            "values": {"enabled": True, "sensitivity": 1.7, "blend": 0.45},
+            "values": {"enabled": True, "sensitivity": 1.7, "blend": 0.45, "dead_zone": 0.12},
         },
         MagicMock(),
     )
@@ -81,6 +83,7 @@ async def test_gesture_cursor_update_applies_runtime_tuning():
     assert config.gesture_cursor.enabled is True
     assert config.gesture_cursor.sensitivity == 1.7
     assert config.gesture_cursor.blend == 0.45
+    assert config.gesture_cursor.dead_zone == 0.12
     config.save.assert_called_once_with()
 
 

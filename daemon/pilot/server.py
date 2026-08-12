@@ -1,4 +1,4 @@
-﻿"""WebSocket JSON-RPC 2.0 server for the Pilot daemon."""
+"""WebSocket JSON-RPC 2.0 server for the Pilot daemon."""
 
 from __future__ import annotations
 
@@ -1241,17 +1241,17 @@ class PilotServer:
         # ── LAN Mesh Network (opt-in via config) ──
         if self.config.network.enabled:
             try:
-                from pilot.network.mesh import HelioxMesh
+                from pilot.network.mesh import ZariffMesh
                 from pilot.system.plugins import get_manager as get_plugin_manager
 
-                self._mesh = HelioxMesh(
+                self._mesh = ZariffMesh(
                     config=self.config.network,
                     executor=self._executor,
                     plugin_manager=get_plugin_manager(),
                 )
-                logger.info("HelioxMesh initialised (will start with server)")
+                logger.info("ZariffMesh initialised (will start with server)")
             except Exception:
-                logger.warning("HelioxMesh init failed (non-critical)", exc_info=True)
+                logger.warning("ZariffMesh init failed (non-critical)", exc_info=True)
 
     async def _broadcast_notification(self, method: str, params: Any) -> None:
         """Broadcast a notification to all connected clients.
@@ -1921,7 +1921,7 @@ class PilotServer:
                 )
                 await self._broadcast_notification("task_complete", payload)
             except Exception:
-                pass
+                logger.warning("Failed to record task outcome/experience event", exc_info=True)
 
         async def _prepare_durable_replan(reason: str) -> None:
             if self._durable_tasks is None or not self._active_task_id:
@@ -2212,7 +2212,7 @@ class PilotServer:
                         privacy_class=PrivacyClass.SENSITIVE,
                     )
                 except Exception:
-                    pass
+                    logger.debug("Screen-vision context collection failed", exc_info=True)
             recent_companion_context = self._recent_companion_context_by_session.get(chat_session_id, "")
             if recent_companion_context:
                 _screen_ctx = (f"{_screen_ctx}\n\n[RECENT COMPANION CONTEXT]\n{recent_companion_context}").strip()
@@ -4043,7 +4043,7 @@ class PilotServer:
         return data
 
     async def _handle_get_security_status(self, params: dict, ws: ServerConnection) -> dict:
-        """Return both the Heliox root policy and the daemon's real OS privilege state."""
+        """Return both the Zariff root policy and the daemon's real OS privilege state."""
         from pilot.security.privileges import security_runtime_status
 
         return security_runtime_status(self.config.security.root_enabled)
@@ -4149,6 +4149,12 @@ class PilotServer:
                         return {
                             "status": "error",
                             "message": "gesture_cursor.blend must be from 0 to 1",
+                        }
+                if section == "gesture_cursor" and k == "dead_zone":
+                    if not isinstance(v, (int, float)) or isinstance(v, bool) or not 0 <= v <= 0.2:
+                        return {
+                            "status": "error",
+                            "message": "gesture_cursor.dead_zone must be from 0 to 0.2",
                         }
                 if section == "adaptive_calibration" and k == "gesture_enabled":
                     if not isinstance(v, bool):
@@ -5879,7 +5885,7 @@ class PilotServer:
                         author = p.get("author", author)
                         break
             except Exception:
-                pass
+                logger.warning("Failed to read plugin registry %s", registry_path, exc_info=True)
 
         if plugin_name == "home-assistant":
             if not tools:
@@ -6975,7 +6981,7 @@ def handle_tool(tool_name, params):
         return task
 
     async def _arm_voice_follow_up(self) -> bool:
-        """Open one wake-free conversational turn after Heliox stops talking."""
+        """Open one wake-free conversational turn after Zariff stops talking."""
         if not self._voice_listener or not self._voice_listener.is_running:
             return False
         self._voice_listener.arm_follow_up_window()
@@ -7458,7 +7464,7 @@ def handle_tool(tool_name, params):
         params: dict,
         ws: ServerConnection,
     ) -> dict:
-        """List microphone inputs that support Heliox's recording format."""
+        """List microphone inputs that support Zariff's recording format."""
         try:
             import sounddevice as sd
 

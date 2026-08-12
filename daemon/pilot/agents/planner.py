@@ -1,4 +1,4 @@
-﻿"""Planner agent — converts natural language requests into structured ActionPlans.
+"""Planner agent — converts natural language requests into structured ActionPlans.
 
 The Planner has ZERO imports from pilot.system.* — it cannot execute anything.
 It only produces Action objects that must pass through validation before reaching the Executor.
@@ -563,7 +563,7 @@ class Planner:
             )
 
         # --- current world situation -> useful live visualization ---
-        # This is a bounded presentation intent, not a claim that Heliox has
+        # This is a bounded presentation intent, not a claim that Zariff has
         # independently verified every item on the third-party dashboard.
         wants_world_monitor = (
             re.search(r"\b(?:current|latest|live|today|now)\b", text)
@@ -1322,37 +1322,31 @@ class Planner:
                     has_slow = any(cmd in script_lower for cmd in _SLOW_CMDS)
                     if has_slow:
                         # Convert to code_execute with subprocess
-                        from pilot.actions import CodeParams
+                        from pilot.actions import CodeExecParams
 
-                        python_code = "import subprocess, os\ncommands = {}\n"
-                        # Parse lines from the script that look like commands
                         lines = [l.strip() for l in script.split("\n") if l.strip() and not l.strip().startswith("#")]
-                        cmd_dict_parts = []
-                        for line in lines:
-                            cmd_name = line.split()[0] if line.split() else ""
-                            if cmd_name.lower() in _SLOW_CMDS or "|" in line:
-                                safe_line = line.replace("'", "\\'")
-                                cmd_dict_parts.append(f"    '{safe_line}': '{safe_line}'")
-                        if cmd_dict_parts:
+                        cmd_lines = [
+                            line
+                            for line in lines
+                            if line.split() and (line.split()[0].lower() in _SLOW_CMDS or "|" in line)
+                        ]
+                        if cmd_lines:
                             python_code = "import subprocess\nresults = []\n"
-                            for line in lines:
-                                if line.strip():
-                                    safe_line = line.replace("'", "\\'")
-                                    python_code += (
-                                        f"try:\n"
-                                        f"    r = subprocess.run('{safe_line}', shell=True, capture_output=True, text=True, timeout=45)\n"
-                                        f"    results.append('=== {safe_line} ===\\n' + r.stdout)\n"
-                                        f"except Exception as e:\n"
-                                        f"    results.append('=== {safe_line} === FAILED: ' + str(e))\n"
-                                    )
+                            for safe_line in cmd_lines:
+                                safe_line = safe_line.replace("'", "\\'")
+                                python_code += (
+                                    f"try:\n"
+                                    f"    r = subprocess.run('{safe_line}', shell=True, capture_output=True, text=True, timeout=45)\n"
+                                    f"    results.append('=== {safe_line} ===\\n' + r.stdout)\n"
+                                    f"except Exception as e:\n"
+                                    f"    results.append('=== {safe_line} === FAILED: ' + str(e))\n"
+                                )
                             python_code += "print('\\n'.join(results))\n"
 
                             fixed[i] = Action(
                                 action_type=ActionType.CODE_EXECUTE,
                                 target="system_commands",
-                                description=action.description or "Run system commands",
-                                risk_level=action.risk_level,
-                                parameters=CodeParams(
+                                parameters=CodeExecParams(
                                     code=python_code,
                                     language="python",
                                 ),

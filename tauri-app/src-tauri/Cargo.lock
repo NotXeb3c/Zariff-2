@@ -1851,32 +1851,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
-name = "heliox-os"
-version = "0.10.1"
-dependencies = [
- "battery",
- "dirs",
- "enigo",
- "futures-util",
- "libc",
- "opener",
- "pdf-extract",
- "screenshots",
- "serde",
- "serde_json",
- "sysinfo",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-notification",
- "tauri-plugin-shell",
- "tokio",
- "tokio-tungstenite",
- "zip",
-]
-
-[[package]]
 name = "hermit-abi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6563,6 +6537,32 @@ dependencies = [
  "quote",
  "syn 2.0.117",
  "synstructure",
+]
+
+[[package]]
+name = "zariff"
+version = "0.10.2"
+dependencies = [
+ "battery",
+ "dirs",
+ "enigo",
+ "futures-util",
+ "libc",
+ "opener",
+ "pdf-extract",
+ "screenshots",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-notification",
+ "tauri-plugin-shell",
+ "tokio",
+ "tokio-tungstenite",
+ "zip",
 ]
 
 [[package]]

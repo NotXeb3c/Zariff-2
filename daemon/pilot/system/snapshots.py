@@ -1,4 +1,4 @@
-﻿"""Snapshot and rollback integration — Btrfs and Timeshift.
+"""Snapshot and rollback integration — Btrfs and Timeshift.
 
 Automatically detects the filesystem type and uses the appropriate
 snapshot mechanism. Falls back gracefully if neither is available.

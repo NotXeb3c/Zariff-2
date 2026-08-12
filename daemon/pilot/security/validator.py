@@ -43,6 +43,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger("pilot.security.validator")
 
 
+def _path_is_within(path: str, protected: str) -> bool:
+    """Return True if ``path`` is inside ``protected`` (or equals it).
+
+    Comparison is case-insensitive on Windows to prevent trivial bypasses
+    via case changes, and requires a path-boundary match so a sibling
+    directory (e.g. ``DocsEvil`` vs ``Docs``) is not treated as protected.
+    """
+    import sys
+
+    norm_path = path.replace("\\", "/").rstrip("/") or "/"
+    norm_protected = protected.replace("\\", "/").rstrip("/") or "/"
+    if sys.platform == "win32":
+        norm_path = norm_path.lower()
+        norm_protected = norm_protected.lower()
+    if norm_protected == "/":
+        return False
+    return norm_path == norm_protected or norm_path.startswith(norm_protected + "/")
+
+
 class ValidationError(Exception):
     def __init__(self, action_index: int, message: str) -> None:
         self.action_index = action_index
@@ -335,7 +354,7 @@ class ActionValidator:
                 except Exception:
                     resolved_protected = protected
 
-                if resolved_path.startswith(resolved_protected):
+                if _path_is_within(resolved_path, resolved_protected):
                     raise ValidationError(idx, f"Path {action.parameters.path} is in protected folder {protected}")
 
         if isinstance(action.parameters, PackageParams) and action.action_type == ActionType.PACKAGE_REMOVE:

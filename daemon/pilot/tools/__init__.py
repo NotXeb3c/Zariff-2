@@ -1,1 +1,1 @@
-﻿"""Tools package for Zariff pilot."""
+"""Tools package for Zariff pilot."""

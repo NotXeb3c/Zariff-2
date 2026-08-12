@@ -4,7 +4,7 @@
   import { invoke } from "../api/invoke";
   type FeedItem = {
     title: string;
-    time: string;
+    source: string;
   };
   let pinned = false;
   function togglePin() {
@@ -34,7 +34,7 @@
           {item.title}
         </p>
         <span>
-          {item.time}
+          {item.source}
         </span>
       </div>
     {/each}

@@ -2,7 +2,7 @@
   "name": "home-assistant",
   "version": "1.0.0",
   "description": "Control smart home devices via Home Assistant API",
-  "author": "VyomKulshrestha",
+  "author": "NotXeb3c",
   "tools": [
     {
       "name": "ha_lights",

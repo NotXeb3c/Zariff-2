@@ -1,4 +1,4 @@
-"""Shared intelligence infrastructure for Heliox."""
+"""Shared intelligence infrastructure for Zariff."""
 
 from pilot.intelligence.experience import (
     ExperienceContext,

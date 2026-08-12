@@ -9,7 +9,7 @@ import urllib.request
 
 def _weather(city: str) -> dict:
     url = f"https://wttr.in/{urllib.parse.quote(city)}?format=j1"
-    request = urllib.request.Request(url, headers={"User-Agent": "Heliox-OS-Agent"})
+    request = urllib.request.Request(url, headers={"User-Agent": "Zariff-Agent"})
     with urllib.request.urlopen(request, timeout=8) as response:
         return json.loads(response.read().decode("utf-8"))
 

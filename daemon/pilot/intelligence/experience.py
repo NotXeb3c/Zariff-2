@@ -1,4 +1,4 @@
-"""Typed, append-only experience ledger for Heliox intelligence systems."""
+"""Typed, append-only experience ledger for Zariff intelligence systems."""
 
 from __future__ import annotations
 

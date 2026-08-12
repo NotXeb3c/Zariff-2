@@ -9,6 +9,6 @@ Enable in config.toml:
     collab_exec_enabled = true
 """
 
-from pilot.network.mesh import HelioxMesh
+from pilot.network.mesh import ZariffMesh
 
-__all__ = ["HelioxMesh"]
+__all__ = ["ZariffMesh"]

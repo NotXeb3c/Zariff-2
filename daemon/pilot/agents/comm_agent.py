@@ -1,4 +1,4 @@
-﻿"""Communication Agent — handles integrations like Discord, Slack, email, webhooks.
+"""Communication Agent — handles integrations like Discord, Slack, email, webhooks.
 
 Specializes in all outbound communication: sending messages through
 various channels, managing webhooks, and handling notifications.

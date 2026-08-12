@@ -1,4 +1,4 @@
-﻿"""Subconscious Agent — background long-term memory consolidation and personalization.
+"""Subconscious Agent — background long-term memory consolidation and personalization.
 
 Periodically reviews the day's actions, extracts user preferences,
 clusters behavioral patterns, and writes refined "rules" into a

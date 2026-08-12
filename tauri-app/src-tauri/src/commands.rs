@@ -425,16 +425,16 @@ pub fn get_auth_token() -> String {
 
     let candidates = vec![
         local_app_data
-            .join("heliox-os")
+            .join("zariff")
             .join("runtime")
             .join("auth_token"),
         local_app_data
             .join("pilot")
             .join("runtime")
             .join("auth_token"),
-        local_app_data.join("heliox-os").join("auth_token"),
+        local_app_data.join("zariff").join("auth_token"),
         local_app_data.join("pilot").join("auth_token"),
-        std::path::PathBuf::from("/run/user/1000/heliox-os/auth_token"),
+        std::path::PathBuf::from("/run/user/1000/zariff/auth_token"),
         std::path::PathBuf::from("/run/user/1000/pilot/auth_token"),
     ];
 

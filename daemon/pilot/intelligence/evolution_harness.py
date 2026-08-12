@@ -1,4 +1,4 @@
-"""Fail-closed evolutionary code harness for Heliox.
+"""Fail-closed evolutionary code harness for Zariff.
 
 Candidates are archived as patches, evaluated only inside disposable Git
 worktrees and a pre-installed no-network container, and can produce only an

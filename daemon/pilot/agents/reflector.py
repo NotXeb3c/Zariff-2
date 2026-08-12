@@ -1,4 +1,4 @@
-﻿"""Reflection agent — post-task self-evaluation and learning.
+"""Reflection agent — post-task self-evaluation and learning.
 
 After each task completes, the Reflector analyzes performance,
 identifies failure patterns, and generates improvement insights

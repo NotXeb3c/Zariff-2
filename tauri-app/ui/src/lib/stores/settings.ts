@@ -44,6 +44,7 @@ export interface PilotSettings {
     sensitivity: number;
     prediction_ms: number;
     blend: number;
+    dead_zone: number;
   };
   adaptive_calibration: {
     gesture_enabled: boolean;
@@ -107,6 +108,7 @@ const defaultSettings: PilotSettings = {
     sensitivity: 1.0,
     prediction_ms: 80.0,
     blend: 0.3,
+    dead_zone: 0.0,
   },
   adaptive_calibration: {
     gesture_enabled: true,

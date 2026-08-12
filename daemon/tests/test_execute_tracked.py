@@ -1,4 +1,4 @@
-﻿"""Tests for PilotServer._execute_tracked -- the real, cancellable
+"""Tests for PilotServer._execute_tracked -- the real, cancellable
 asyncio.Task wrapper around Executor.execute() that lets _handle_abort
 (Part 3) cancel the CURRENTLY in-flight interactive execution, not just
 signal cancel_event for the next action boundary.

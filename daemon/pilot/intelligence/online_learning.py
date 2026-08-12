@@ -1,7 +1,7 @@
-"""Verified online adaptation over the canonical Heliox experience stream.
+"""Verified online adaptation over the canonical Zariff experience stream.
 
 This module deliberately has no browser, planner, executor, or permission
-dependencies.  It learns only from events that Heliox has already observed and
+dependencies.  It learns only from events that Zariff has already observed and
 its predictions are advisory ranking signals, never execution authority.
 """
 

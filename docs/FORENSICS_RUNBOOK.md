@@ -1,12 +1,12 @@
 # Forensics Agent Runbook
 
-This runbook outlines the operational architecture, containment workflows, and schema definitions for the **Forensics Agent** and its autonomous integration with the **Orchestrator** and **System Agent** within Heliox-OS. It serves as an authoritative manual for system administrators and security operators.
+This runbook outlines the operational architecture, containment workflows, and schema definitions for the **Forensics Agent** and its autonomous integration with the **Orchestrator** and **System Agent** within Zariff. It serves as an authoritative manual for system administrators and security operators.
 
 ---
 
 ## Overview
 
-The **Forensics Agent** is a specialized, autonomous threat-detection component designed to maintain real-time visibility across Heliox-OS. It continuously inspects system logs, monitors session timelines, correlates cross-service events, and detects active operational anomalies.
+The **Forensics Agent** is a specialized, autonomous threat-detection component designed to maintain real-time visibility across Zariff. It continuously inspects system logs, monitors session timelines, correlates cross-service events, and detects active operational anomalies.
 
 By integrating directly with the **Agent Orchestrator** and utilizing the **Threat Containment Bridge**, the Forensics Agent acts as the telemetry provider in an autonomous loop. It not only detects threats but also triggers swift, structured containment plans to neutralize active hazards before they compromise system integrity.
 

@@ -250,19 +250,35 @@ export function predictCursorTarget(filtered: Landmark, predicted: Landmark, ble
  * Sensitivity is a gain around screen centre: 1 preserves the original
  * full-screen mapping, values below 1 reduce travel, and values above 1
  * expand travel until it clamps at the screen edge.
+ *
+ * `deadZone` (normalized radius, 0–0.2) suppresses small hand tremor near
+ * the frame centre: the zone radius is subtracted from the offset magnitude
+ * for both axes, so a hand held within the zone produces no cursor movement
+ * and motion beyond it resumes smoothly from the zone boundary instead of
+ * stuttering. 0 disables the zone.
  */
 export function mapCursorTargetToScreen(
   target: Landmark,
   screenWidth: number,
   screenHeight: number,
   sensitivity: number,
+  deadZone: number = 0,
 ): { x: number; y: number } {
   const width = Math.max(1, Math.floor(screenWidth));
   const height = Math.max(1, Math.floor(screenHeight));
   const gain = Math.max(0.1, Math.min(3, sensitivity));
   const mirroredX = 1 - target.x;
-  const normalizedX = 0.5 + (mirroredX - 0.5) * gain;
-  const normalizedY = 0.5 + (target.y - 0.5) * gain;
+  const zone = Math.max(0, Math.min(0.2, deadZone));
+
+  const applyZone = (offset: number): number => {
+    const magnitude = Math.abs(offset);
+    return Math.sign(offset) * Math.max(0, magnitude - zone);
+  };
+
+  const dx = applyZone(mirroredX - 0.5);
+  const dy = applyZone(target.y - 0.5);
+  const normalizedX = 0.5 + dx * gain;
+  const normalizedY = 0.5 + dy * gain;
 
   return {
     x: Math.round(Math.max(0, Math.min(width - 1, normalizedX * width))),

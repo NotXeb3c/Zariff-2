@@ -1,4 +1,4 @@
-﻿"""Web Agent — handles browsing, scraping, and information retrieval.
+"""Web Agent — handles browsing, scraping, and information retrieval.
 
 Specializes in all web-related interactions: browser automation,
 web scraping, API calls, downloads, and online search.

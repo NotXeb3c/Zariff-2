@@ -1,6 +1,6 @@
-# Heliox OS — IPC Message Formats
+# Zariff — IPC Message Formats
 
-The Heliox OS UI and daemon communicate over a local WebSocket using the [JSON-RPC 2.0](https://www.jsonrpc.org/specification) protocol.
+The Zariff UI and daemon communicate over a local WebSocket using the [JSON-RPC 2.0](https://www.jsonrpc.org/specification) protocol.
 
 ## Protocol Overview
 
@@ -13,7 +13,7 @@ The Heliox OS UI and daemon communicate over a local WebSocket using the [JSON-R
 | Reconnect interval | 3 seconds (auto-reconnect on close) |
 
 The daemon currently registers **146 WebSocket RPC methods**. That is the API
-surface count, not the action catalog: Heliox still exposes **156 action
+surface count, not the action catalog: Zariff still exposes **156 action
 types** through the guarded planner/executor system. This document names every
 registered RPC method; grouped tables are used where several methods share one
 contract.
@@ -349,7 +349,7 @@ Use `section: ""` with `values: { "first_run_complete": true }` to set top-level
 **Result:** `{ "status": "ok" }` or `{ "status": "error", "message": "..." }`
 
 #### `get_security_status`
-Return both the configured Heliox root policy and whether the current daemon
+Return both the configured Zariff root policy and whether the current daemon
 process actually has elevated OS privileges.
 
 **Params:** `{}`
@@ -432,7 +432,7 @@ experience ledger.
 ### API Key Management
 
 #### `store_api_key`
-Store an API key in the operating-system credential store. Heliox uses Windows
+Store an API key in the operating-system credential store. Zariff uses Windows
 Credential Manager, macOS Keychain, or a Secret-Service-compatible Linux
 keyring and fails closed if the platform store is unavailable.
 
@@ -718,7 +718,7 @@ Return the one current text/voice interaction snapshot: `interaction_id`,
 `sequence`, elapsed time, and update time.
 
 #### `list_audio_input_devices`
-List microphone inputs compatible with Heliox's recording format. Stable
+List microphone inputs compatible with Zariff's recording format. Stable
 identifiers are suitable for `voice.input_device`; unavailable devices return
 a clear error instead of silently selecting another microphone.
 
@@ -949,7 +949,7 @@ Load, unload, or query the cognitive engine.
 Start the continuous voice listener. Wake words remain supported, but
 `voice.continuous_conversation_enabled` defaults to true, so complete
 utterances can be routed without repeating the wake phrase while listening is
-on. The listener suppresses Heliox's own TTS and uses a bounded follow-up
+on. The listener suppresses Zariff's own TTS and uses a bounded follow-up
 window after answers.
 
 **Params:** `{ "wake_words": ["hey heliox", "heliox", "hey pilot"] }`
@@ -1260,7 +1260,7 @@ Update narration config. Persists via `config.save()`.
 
 ### User Manual Supervision
 
-Watches the user's OWN independent screen/keyboard/mouse activity — never anything Heliox itself executes, see `pilot.agents.user_supervision`. Off by default (`supervision.enabled`), with `supervision.keyboard_mouse_hook_enabled` as a separate, starker opt-in for the global keyboard/mouse hook. Advisory only — unlike the Narrator's `execution_interrupt`, there is no blocking gate here and no dedicated approve/reject RPC, since Heliox cannot intercept the user's own OS-level input.
+Watches the user's OWN independent screen/keyboard/mouse activity — never anything Zariff itself executes, see `pilot.agents.user_supervision`. Off by default (`supervision.enabled`), with `supervision.keyboard_mouse_hook_enabled` as a separate, starker opt-in for the global keyboard/mouse hook. Advisory only — unlike the Narrator's `execution_interrupt`, there is no blocking gate here and no dedicated approve/reject RPC, since Zariff cannot intercept the user's own OS-level input.
 
 #### `supervision_status`
 Report current supervision config plus whether the keyboard/mouse hook (if enabled) is actually still alive.
@@ -1626,7 +1626,7 @@ Voice listener lifecycle updates.
 - `"wake_detected"` — a wake word was heard; `transcript` is the full utterance it came from.
 - `"listening"` — no command followed the wake word in the same utterance; waiting for a follow-up (`message` is a user-facing prompt).
 - `"timeout"` — no follow-up command was heard within the wait window (`message` is a user-facing note).
-- `"interrupted"` — the user started talking while Heliox was still speaking its response, so playback was cut off (barge-in — see `pilot.system.voice.speak_interruptible`). Only fires when `config.voice.barge_in_enabled` is on and the continuous VAD recorder is active.
+- `"interrupted"` — the user started talking while Zariff was still speaking its response, so playback was cut off (barge-in — see `pilot.system.voice.speak_interruptible`). Only fires when `config.voice.barge_in_enabled` is on and the continuous VAD recorder is active.
 
 ---
 

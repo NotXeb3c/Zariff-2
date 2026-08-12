@@ -1,4 +1,4 @@
-﻿"""Daemon Manager - handles auto-restart, crash capture, and resurrection."""
+"""Daemon Manager - handles auto-restart, crash capture, and resurrection."""
 
 import asyncio
 import logging

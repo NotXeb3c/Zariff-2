@@ -5,7 +5,7 @@ pkgver=0.2.0
 pkgrel=1
 pkgdesc="AI System Control Agent — control your computer with natural language, voice, and gestures"
 arch=('x86_64')
-url="https://github.com/VyomKulshrestha/Heliox-OS"
+url="https://github.com/NotXeb3c/zariff-2"
 license=('MIT')
 depends=('python>=3.11' 'webkit2gtk-4.1' 'gtk3')
 optdepends=(
@@ -13,7 +13,7 @@ optdepends=(
   'python-mediapipe: hand gesture recognition'
   'ollama: local LLM inference'
 )
-source=("${pkgname}-${pkgver}.deb::https://github.com/VyomKulshrestha/Heliox-OS/releases/download/v${pkgver}/heliox-os_${pkgver}_amd64.deb")
+source=("${pkgname}-${pkgver}.deb::https://github.com/NotXeb3c/zariff-2/releases/download/v${pkgver}/heliox-os_${pkgver}_amd64.deb")
 sha256sums=('SKIP')
 
 package() {

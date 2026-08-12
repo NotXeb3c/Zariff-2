@@ -1,6 +1,6 @@
 # 🔐 Security Policy
 
-Heliox OS is a privacy-first, autonomous AI agent that executes real actions on your system. Security isn't an afterthought here — it's core to how we build. If you've found a vulnerability, thank you for taking the time to report it responsibly. This document explains how.
+Zariff is a privacy-first, autonomous AI agent that executes real actions on your system. Security isn't an afterthought here — it's core to how we build. If you've found a vulnerability, thank you for taking the time to report it responsibly. This document explains how.
 
 ---
 
@@ -17,18 +17,18 @@ We actively maintain and patch the `main` branch only.
 
 ## 🔍 Scope
 
-This policy covers the following Heliox OS components:
+This policy covers the following Zariff components:
 
 - **🧱 Sandbox Execution** — isolated environments where code and plans are executed safely
 - **🔑 Permission Tiers** — the five-tier permission system with confirmation gates and rollback support
 - **🧩 Plugin Loading** — how third-party plugins are installed, verified, and executed at startup
 - **🌐 WebSocket IPC** — the communication bridge between the Tauri UI and Python Daemon
 - **🤖 Python Daemon** — the core backend driving agent orchestration, planning, and verification
-- **🖱️ Gesture Cursor Control** — the continuous gesture-to-cursor bridge (off by default, opt-in only) that drives the real OS mouse cursor; the one capability in Heliox OS that acts without a per-action confirmation gate, so its escape hatches (open palm, stop button, disabling the setting) and screen-bounds clamping are treated as security-relevant, not just UX
+- **🖱️ Gesture Cursor Control** — the continuous gesture-to-cursor bridge (off by default, opt-in only) that drives the real OS mouse cursor; the one capability in Zariff that acts without a per-action confirmation gate, so its escape hatches (open palm, stop button, disabling the setting) and screen-bounds clamping are treated as security-relevant, not just UX
 - **🚪 Agent Gateway** — source-scoped permission floors, tamper-evident audit logging, and dry-run/simulation coverage for shell, browsing, and system-control actions, layered alongside the tier-based `PermissionChecker` (see the dedicated section below)
 
 **Out of scope:**
-- Bugs solely in third-party plugin business logic that Heliox does not
+- Bugs solely in third-party plugin business logic that Zariff does not
   maintain. Capability, broker, signature, catalog, or approval bypasses remain
   in scope even when a third-party package triggers them.
 - Vulnerabilities in upstream dependencies (please report to their maintainers)
@@ -42,8 +42,8 @@ This policy covers the following Heliox OS components:
 
 Public issues expose the problem to everyone before it's fixed — which could put users at risk. Instead:
 
-1. **GitHub Private Advisory** *(preferred)* — use the [Security tab](https://github.com/VyomKulshrestha/Heliox-OS/security/advisories/new) to submit a private report directly.
-2. **Email the maintainer** — contact [@VyomKulshrestha](https://github.com/VyomKulshrestha) via the email listed on their GitHub profile.
+1. **GitHub Private Advisory** *(preferred)* — use the [Security tab](https://github.com/NotXeb3c/zariff-2/security/advisories/new) to submit a private report directly.
+2. **Email the maintainer** — contact [@NotXeb3c](https://github.com/NotXeb3c) via the email listed on their GitHub profile.
 
 ### What to include in your report
 
@@ -115,7 +115,7 @@ The command should fail with `PermissionError` and leave the file in place.
 
 ## Intelligence, memory, and self-improvement boundaries
 
-Heliox's intelligence layers share one authority rule: learned or generated
+Zariff's intelligence layers share one authority rule: learned or generated
 information may improve context, ranking, recovery, or caution, but cannot
 grant permission, remove deterministic warnings, or execute by itself.
 
@@ -218,7 +218,7 @@ requested action.
 
 **What problem this solves.** `destructive_critic.py`'s `heuristic_risk()` — the cheap rule that decides whether a Tier-3-only/irreversible-only plan is worth an LLM critic round-trip — only looks at plan length, distinct-target count, `dangerous_flags`, and tier mixing. It has no visibility into two concrete failure modes: a plan that would push disk usage to exhaustion, or a plan that touches a user-configured protected folder/package (`config.restrictions.protected_folders`/`protected_packages`) despite being otherwise unremarkable by every heuristic signal above (short, single target, no flags).
 
-**Design, modeled on [Ferrum-OS](https://github.com/VyomKulshrestha/Ferrum-OS)'s `cognitive/world_model` architecture, adapted for one critical difference.** Ferrum-OS trains its predictive model by running thousands of synthetic actions against a disposable, from-scratch kernel booted in a throwaway QEMU VM — real telemetry, safely, because the VM can be destroyed and rebuilt endlessly. Heliox runs on the user's actual machine, so this feature does **not** attempt the equivalent (repeatedly running real destructive/root-level actions against a real computer purely to collect training data). Instead:
+**Design, modeled on [Ferrum-OS](https://github.com/NotXeb3c/Ferrum-OS)'s `cognitive/world_model` architecture, adapted for one critical difference.** Ferrum-OS trains its predictive model by running thousands of synthetic actions against a disposable, from-scratch kernel booted in a throwaway QEMU VM — real telemetry, safely, because the VM can be destroyed and rebuilt endlessly. Zariff runs on the user's actual machine, so this feature does **not** attempt the equivalent (repeatedly running real destructive/root-level actions against a real computer purely to collect training data). Instead:
 
 - **`pilot.security.risk_observation`** captures real OS telemetry (process count, disk usage, memory usage) via `psutil` — no fabricated numbers.
 - **`pilot.security.risk_model`** encodes (OS state, proposed action) into a small fixed vector that includes both an action-family one-hot and an exact action-type one-hot, then predicts two *concrete, interpretable* outcome fields — predicted disk usage after and predicted process-count delta — never an opaque risk scalar. A rule-based table is always evaluated beside the small numpy MLP (no PyTorch, no new heavy dependency) for action types with real training data.
@@ -382,10 +382,10 @@ fallback and is suppressed when daemon speech already owns the utterance.
 
 **Not a token-level full-duplex model.** This is a TTS-quality change only —
 it does **not** provide Moshi's simultaneous token-level listening and
-generation. Heliox implements product-level duplex coordination around the
+generation. Zariff implements product-level duplex coordination around the
 models: VAD detects user speech, the shared speech coordinator stops playback,
 the active task accepts the utterance as a correction, and the continuous
-listener resumes after Heliox finishes speaking. Pocket TTS playback is
+listener resumes after Zariff finishes speaking. Pocket TTS playback is
 cancellable through `sounddevice.stop()` just like the OS-native subprocess
 paths; this coordination is application logic, not a capability of the TTS
 model itself.
@@ -444,14 +444,14 @@ model itself.
 
 ## 👁️ User Manual Supervision (opt-in)
 
-**What this is.** `pilot.agents.user_supervision.UserSupervisionEngine` watches the user's OWN independent screen/keyboard/mouse activity — never anything Heliox itself executes, that's the Live Execution Narrator's job above — and can offer a spoken cognitive check-in or a risk warning. This is the single biggest privacy surface in this codebase, built and gated with that weight in mind rather than as a routine feature toggle.
+**What this is.** `pilot.agents.user_supervision.UserSupervisionEngine` watches the user's OWN independent screen/keyboard/mouse activity — never anything Zariff itself executes, that's the Live Execution Narrator's job above — and can offer a spoken cognitive check-in or a risk warning. This is the single biggest privacy surface in this codebase, built and gated with that weight in mind rather than as a routine feature toggle.
 
 **Two independent, advisory-only trigger sources**, evaluated on one periodic tick (`BackgroundTaskManager`, the same precedent the Autonomous Healing Engine uses):
 
 - **Cognitive coaching** — `pilot.cognitive.cognitive_engine.CognitiveEngine.predict_cognitive_state()` is fed a *real* stimulus for the first time here (an OCR screen snippet plus the active window title), instead of the synthetic activity labels every other call site in this codebase uses (window titles alone, notification metadata, static action-type strings, or the frontend's own client-side mouse-activity labels). A sustained stress/cognitive-load threshold crossing triggers a gentle check-in.
 - **Risk-pattern detection** — the OCR snippet and a transient keystroke buffer (see below) are matched against `pilot.security.risk_patterns`' small, explicit, hardcoded regex table — the same "auditable rules, never a learned model" philosophy the Learned Risk Gate's `risk_safety.py` already established. A match triggers a direct warning.
 
-**Advisory only, never a gate.** Unlike the Live Execution Narrator, which pauses a Heliox-issued plan/action *before it runs* via a real blocking confirmation, Heliox has no way to intercept or block the user's own OS-level input — it only observes a copy via the hook described below. Both trigger methods return `None`, not a bool; there is nothing to approve or deny, so the frontend pairs a spoken interjection with a dismiss-only modal, not an approve/deny one.
+**Advisory only, never a gate.** Unlike the Live Execution Narrator, which pauses a Zariff-issued plan/action *before it runs* via a real blocking confirmation, Zariff has no way to intercept or block the user's own OS-level input — it only observes a copy via the hook described below. Both trigger methods return `None`, not a bool; there is nothing to approve or deny, so the frontend pairs a spoken interjection with a dismiss-only modal, not an approve/deny one.
 
 **Why pattern-matching over an LLM call on raw content.** Correlating raw screen/keystroke content through an LLM — even a local one — would be a strictly bigger leak surface than matching it against a small, explicit, human-readable pattern table entirely in-process. The pattern table lives in `pilot/security/risk_patterns.py`, is short enough to read end to end, and is the only thing standing between "something risky-looking happened" and a warning being shown.
 
@@ -507,8 +507,8 @@ review contract.
 
 ## 📬 Contact
 
-- **Maintainer**: [@VyomKulshrestha](https://github.com/VyomKulshrestha)
-- **Private Advisory**: [Submit here](https://github.com/VyomKulshrestha/Heliox-OS/security/advisories/new)
+- **Maintainer**: [@NotXeb3c](https://github.com/NotXeb3c)
+- **Private Advisory**: [Submit here](https://github.com/NotXeb3c/zariff-2/security/advisories/new)
 
 ---
 

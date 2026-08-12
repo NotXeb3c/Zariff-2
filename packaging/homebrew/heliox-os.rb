@@ -1,13 +1,13 @@
-cask "heliox-os" do
+cask "zariff" do
   version "0.2.0"
   sha256 :no_check # Will be filled after release
 
-  url "https://github.com/VyomKulshrestha/Heliox-OS/releases/download/v#{version}/Heliox OS_#{version}_aarch64.dmg",
-      verified: "github.com/VyomKulshrestha/Heliox-OS/"
+  url "https://github.com/NotXeb3c/zariff-2/releases/download/v#{version}/Zariff_#{version}_aarch64.dmg",
+      verified: "github.com/NotXeb3c/zariff-2/"
 
-  name "Heliox OS"
+  name "Zariff"
   desc "AI System Control Agent — control your computer with voice, text, and gestures"
-  homepage "https://github.com/VyomKulshrestha/Heliox-OS"
+  homepage "https://github.com/NotXeb3c/zariff-2"
 
   livecheck do
     url :url
@@ -16,10 +16,10 @@ cask "heliox-os" do
 
   depends_on formula: "python@3.12"
 
-  app "Heliox OS.app"
+  app "Zariff.app"
 
   zap trash: [
-    "~/.config/heliox-os",
+    "~/.config/zariff",
     "~/Library/Application Support/com.helioxos.app",
   ]
 end

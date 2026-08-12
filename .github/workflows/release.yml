@@ -1,4 +1,4 @@
-name: "Release Heliox OS"
+name: "Release Zariff"
 
 on:
   push:
@@ -213,9 +213,9 @@ jobs:
         with:
           projectPath: "tauri-app"
           tagName: ${{ github.event_name == 'push' && github.ref_name || inputs.release_tag }}
-          releaseName: "Heliox OS v${{ needs.release-gate.outputs.version }}"
+          releaseName: "Zariff v${{ needs.release-gate.outputs.version }}"
           releaseBody: |
-            ## Heliox OS v${{ needs.release-gate.outputs.version }}
+            ## Zariff v${{ needs.release-gate.outputs.version }}
 
             This is a **draft prerelease** pending clean-machine installation,
             first-run daemon, hardware-input, and artifact verification.

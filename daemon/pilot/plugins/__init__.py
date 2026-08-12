@@ -1,4 +1,4 @@
-﻿"""Plugin Ecosystem — dynamic tool/agent extension system.
+"""Plugin Ecosystem — dynamic tool/agent extension system.
 
 Allows developers to add new capabilities to Zariff by dropping
 plugin manifests into a plugins directory.
@@ -45,7 +45,7 @@ WASM plugin manifest (JSON):
 }
 
 Plugin directory structure:
-  ~/.config/heliox-os/plugins/
+  ~/.config/zariff/plugins/
     docker-agent/
       manifest.json
       plugin.ed25519.pub

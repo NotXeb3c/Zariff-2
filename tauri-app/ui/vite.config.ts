@@ -1,4 +1,4 @@
-﻿/// <reference types="vitest" />
+/// <reference types="vitest" />
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import type { Plugin, ResolvedConfig } from "vite";
@@ -167,11 +167,11 @@ function daemonTokenDevPlugin(): Plugin {
           try {
             const localAppData = process.env.LOCALAPPDATA || join(process.env.USERPROFILE || "", "AppData", "Local");
             const candidates = [
-              join(localAppData, "heliox-os", "runtime", "auth_token"),
+              join(localAppData, "zariff", "runtime", "auth_token"),
               join(localAppData, "pilot", "runtime", "auth_token"),
-              join(localAppData, "heliox-os", "auth_token"),
+              join(localAppData, "zariff", "auth_token"),
               join(localAppData, "pilot", "auth_token"),
-              "/run/user/1000/heliox-os/auth_token",
+              "/run/user/1000/zariff/auth_token",
               "/run/user/1000/pilot/auth_token",
             ];
             for (const path of candidates) {
@@ -446,7 +446,7 @@ function daemonTokenDevPlugin(): Plugin {
                 }
                 feedItems.push({
                   title: `Zariff v${currentVer} Active Release (JARVIS Core Engine)`,
-                  url: "https://github.com/VyomKulshrestha/Heliox-OS/releases",
+                  url: "https://github.com/NotXeb3c/zariff-2/releases",
                   source: "Current Build",
                 });
 
@@ -464,7 +464,7 @@ function daemonTokenDevPlugin(): Plugin {
                       if (parts[0]) {
                         feedItems.push({
                           title: `Release ${parts[0]}: ${parts[2] || "Official Zariff Distribution"}`,
-                          url: `https://github.com/VyomKulshrestha/Heliox-OS/releases/tag/${parts[0]}`,
+                          url: `https://github.com/NotXeb3c/zariff-2/releases/tag/${parts[0]}`,
                           source: `Release Tag (${parts[1] || "Published"})`,
                         });
                       }
@@ -474,7 +474,7 @@ function daemonTokenDevPlugin(): Plugin {
                 if (feedItems.length === 1) {
                   feedItems.push({
                     title: `Cognitive Engine & Threat Containment Bridge Live`,
-                    url: "https://github.com/VyomKulshrestha/Heliox-OS",
+                    url: "https://github.com/NotXeb3c/zariff-2",
                     source: "System Feature",
                   });
                 }
@@ -482,7 +482,7 @@ function daemonTokenDevPlugin(): Plugin {
                 feedItems = [
                   {
                     title: `Zariff v${UI_VERSION} Active - JARVIS Core Running`,
-                    url: "https://github.com/VyomKulshrestha/Heliox-OS",
+                    url: "https://github.com/NotXeb3c/zariff-2",
                     source: "System",
                   },
                 ];

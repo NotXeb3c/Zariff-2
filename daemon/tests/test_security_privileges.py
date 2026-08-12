@@ -1,4 +1,4 @@
-﻿from pilot.security.privileges import security_runtime_status
+from pilot.security.privileges import security_runtime_status
 
 
 def test_root_policy_disabled_is_not_reported_as_unlocked():

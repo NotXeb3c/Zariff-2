@@ -49,8 +49,8 @@ def collect_versions(root: Path) -> dict[str, str]:
     cargo_lock = _toml(root / "tauri-app" / "src-tauri" / "Cargo.lock")
     tauri_config = _json(root / "tauri-app" / "src-tauri" / "tauri.conf.json")
 
-    heliox_lock = next(
-        package for package in cargo_lock["package"] if package.get("name") == "heliox-os"
+    zariff_lock = next(
+        package for package in cargo_lock["package"] if package.get("name") == "zariff"
     )
     current_changelog = changelog.get("CHANGELOG")
     changelog_version = str(changelog.get("VERSION", ""))
@@ -66,7 +66,7 @@ def collect_versions(root: Path) -> dict[str, str]:
         "tauri-app/ui/package-lock.json": str(ui_lock["version"]),
         "tauri-app/ui/package-lock.json packages root": str(ui_lock["packages"][""]["version"]),
         "tauri-app/src-tauri/Cargo.toml": str(cargo_manifest["package"]["version"]),
-        "tauri-app/src-tauri/Cargo.lock": str(heliox_lock["version"]),
+        "tauri-app/src-tauri/Cargo.lock": str(zariff_lock["version"]),
         "tauri-app/src-tauri/tauri.conf.json": str(tauri_config["version"]),
     }
 
