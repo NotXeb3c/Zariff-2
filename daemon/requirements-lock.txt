@@ -545,7 +545,7 @@ tqdm==4.68.4
     #   transformers
 transformers==5.13.1
     # via sentence-transformers
-typer==0.26.8
+typer==0.27.1
     # via
     #   chromadb
     #   huggingface-hub
