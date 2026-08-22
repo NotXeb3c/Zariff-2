@@ -1332,14 +1332,13 @@ class Planner:
                         ]
                         if cmd_lines:
                             python_code = "import subprocess\nresults = []\n"
-                            for safe_line in cmd_lines:
-                                safe_line = safe_line.replace("'", "\\'")
+                            for line in cmd_lines:
                                 python_code += (
                                     f"try:\n"
-                                    f"    r = subprocess.run('{safe_line}', shell=True, capture_output=True, text=True, timeout=45)\n"
-                                    f"    results.append('=== {safe_line} ===\\n' + r.stdout)\n"
+                                    f"    r = subprocess.run({line!r}, shell=True, capture_output=True, text=True, timeout=45)\n"
+                                    f"    results.append('=== ' + {line!r} + ' ===\\n' + r.stdout)\n"
                                     f"except Exception as e:\n"
-                                    f"    results.append('=== {safe_line} === FAILED: ' + str(e))\n"
+                                    f"    results.append('=== ' + {line!r} + ' === FAILED: ' + str(e))\n"
                                 )
                             python_code += "print('\\n'.join(results))\n"
 

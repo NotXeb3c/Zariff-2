@@ -162,13 +162,21 @@ Combined, an autonomous or web-agent-sourced plan could drive the browser (navig
 - **Dry-run/simulation extended.** `SimulationSandbox` previously modeled shell/file impacts only; it now produces meaningful risk assessments for browser (navigation targets, script previews) and system-control (mouse/keyboard, process, registry) actions too, so a dry-run plan touching these surfaces gets real impact analysis instead of a generic fallback description.
 
 **Known scope limit.** Legacy direct callers in `agents/self_heal.py`,
-`network/mesh.py`, `network/collab_executor.py`, and
+`network/collab_executor.py`, and
 `swarm/swarm_router_agent.py`, plus a few server utility paths, still omit an
 explicit `InvocationSource` and therefore inherit the interactive-equivalent
 floor. Their Tier 2+ actions remain subject to normal permission,
 confirmation, critic, and audit controls, but do not receive a narrower origin
 profile. The specialist mesh, autonomous jobs, voice, gesture, and
 self-healing paths are explicitly tagged.
+
+The LAN mesh peer path (`network/mesh.py`) is **explicitly tagged with the
+`mesh` profile**, whose per-family ceiling is read-only for shell, browsing,
+and system control. It is additionally gated at the ingress: inbound P2P
+connections require a matching `network.shared_secret` (the mesh fails closed
+when no secret is configured — disabled by default via `network.enabled = false`),
+and delegated plans that would need local interactive confirmation are refused
+outright rather than executed without a human present.
 
 Settings → Agent Gateway Policy shows the enforced floor per source and lets you tighten it (never loosen it beyond the shipped defaults' intent); Settings → Agent Gateway Audit Log shows every recorded decision with a one-click integrity check.
 

@@ -493,6 +493,11 @@ class NetworkConfig:
     peer_timeout_s: int = 30  # seconds before a silent peer is considered gone
     skill_sync_enabled: bool = True  # broadcast/receive plugins from peers
     collab_exec_enabled: bool = True  # distribute parallelizable action batches
+    # Pre-shared secret required on every inbound P2P connection. The mesh
+    # fails CLOSED: when this is empty, no inbound peer is accepted and no
+    # outbound handshake carries a secret, so the feature only works once
+    # every peer is configured with the same non-empty value.
+    shared_secret: str = ""
 
 
 @dataclass
@@ -750,6 +755,7 @@ def _validate_config_types(raw: dict) -> None:
             "peer_timeout_s": int,
             "skill_sync_enabled": bool,
             "collab_exec_enabled": bool,
+            "shared_secret": str,
         },
         "ssh": {
             "enabled": bool,

@@ -7,6 +7,7 @@ File watchers, performance monitors, scheduled checks, custom triggers.
 from __future__ import annotations
 
 import asyncio
+import ast
 import contextlib
 import json
 import logging
@@ -21,6 +22,121 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("pilot.system.triggers")
+
+
+# Calls restricted to these safe read-only psutil/time functions. Functions
+# like psutil.Popen (shell launch) or Process(pid).kill() are intentionally
+# excluded: the expression is untrusted (it can come from an LLM-produced
+# trigger_create action) and must never be able to execute system effects.
+_SAFE_TRIGGER_CALLS: dict[str, set[str]] = {
+    "psutil": {
+        "cpu_percent",
+        "cpu_count",
+        "cpu_freq",
+        "cpu_stats",
+        "virtual_memory",
+        "swap_memory",
+        "disk_usage",
+        "disk_partitions",
+        "net_io_counters",
+        "net_connections",
+        "boot_time",
+        "users",
+        "pids",
+        "process_iter",
+        "sensors_temperatures",
+        "sensors_battery",
+        "sensors_fans",
+    },
+    "time": {"time", "localtime", "gmtime", "strftime", "sleep", "timezone", "altzone", "daylight"},
+}
+
+_SAFE_TRIGGER_NAMES = {"psutil", "time"}
+
+
+def _evaluate_condition_expression(expr: str, psutil: Any, time_mod: Any) -> bool:
+    """Evaluate a trigger condition against a strict AST whitelist.
+
+    ``eval`` with stripped builtins is not a sandbox: attribute traversal from
+    any module object can recover ``__import__`` and reach ``os.system``. This
+    evaluator instead rejects every node that is not a constant, a comparison,
+    a boolean/numeric/arithmetic combination, or an attribute chain rooted at
+    ``psutil``/``time`` whose final call target is in ``_SAFE_TRIGGER_CALLS``.
+    """
+
+    def _check(node: ast.AST) -> None:
+        if isinstance(node, ast.Expression):
+            _check(node.body)
+            return
+        if isinstance(node, ast.Constant):
+            if node.value is not None and not isinstance(node.value, (bool, int, float, str)):
+                raise ValueError(f"unsupported constant {node.value!r}")
+            return
+        if isinstance(node, ast.Name):
+            if node.id not in _SAFE_TRIGGER_NAMES:
+                raise ValueError(f"unsupported name {node.id!r}")
+            return
+        if isinstance(node, ast.Attribute):
+            if node.attr.startswith("_"):
+                raise ValueError(f"attribute {node.attr!r} is not allowed")
+            _check(node.value)
+            return
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Attribute):
+                raise ValueError("calls must target psutil/time attributes")
+            root = node.func.value
+            if isinstance(root, ast.Attribute):
+                raise ValueError("chained nested calls are not allowed")
+            if not isinstance(root, ast.Name) or root.id not in _SAFE_TRIGGER_NAMES:
+                raise ValueError("call root must be psutil or time")
+            if node.func.attr not in _SAFE_TRIGGER_CALLS.get(root.id, set()):
+                raise ValueError(f"function {root.id}.{node.func.attr}() is not allowed")
+            for arg in node.args:
+                _check(arg)
+            for kw in node.keywords:
+                _check(kw.value)
+            return
+        if isinstance(node, ast.Compare):
+            _check(node.left)
+            for op in node.ops:
+                if not isinstance(
+                    op,
+                    (ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.In, ast.NotIn, ast.Is, ast.IsNot),
+                ):
+                    raise ValueError("unsupported comparison operator")
+            for comparator in node.comparators:
+                _check(comparator)
+            return
+        if isinstance(node, ast.BoolOp):
+            if not isinstance(node.op, (ast.And, ast.Or)):
+                raise ValueError("unsupported boolean operator")
+            for value in node.values:
+                _check(value)
+            return
+        if isinstance(node, ast.UnaryOp):
+            if not isinstance(node.op, (ast.Not, ast.USub, ast.UAdd)):
+                raise ValueError("unsupported unary operator")
+            _check(node.operand)
+            return
+        if isinstance(node, ast.BinOp):
+            if not isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)):
+                raise ValueError("unsupported binary operator")
+            _check(node.left)
+            _check(node.right)
+            return
+        raise ValueError(f"unsupported expression node {type(node).__name__}")
+
+    try:
+        tree = ast.parse(expr, mode="eval")
+        _check(tree)
+        result = eval(
+            compile(tree, "<trigger>", "eval"),
+            {"__builtins__": {}, "psutil": psutil, "time": time_mod},
+        )
+        return bool(result)
+    except Exception as e:
+        logger.warning("Custom condition eval error: %s", e)
+        return False
 
 
 class TriggerType(StrEnum):
@@ -296,12 +412,7 @@ class TriggerEngine:
         except ImportError:
             psutil = None
 
-        try:
-            result = eval(expr, {"__builtins__": {}, "psutil": psutil, "time": time})
-            return bool(result)
-        except Exception as e:
-            logger.warning("Custom condition eval error: %s", e)
-            return False
+        return _evaluate_condition_expression(expr, psutil, time)
 
 
 # ── Global engine instance ───────────────────────────────────────────

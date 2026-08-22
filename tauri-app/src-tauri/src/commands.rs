@@ -10,6 +10,106 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 type DaemonSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+/// RPC methods the webview is allowed to forward to the daemon.
+///
+/// `send_to_daemon` previously forwarded *any* method a page sent, making the
+/// webview the entire control plane: a single XSS could have called
+/// `store_api_key`, `update_config`, `restart_elevated`, etc. Only forward
+/// methods the UI actually invokes (see `ui/src/lib/api/daemon.ts` call sites).
+fn daemon_method_allowed(method: &str) -> bool {
+    matches!(
+        method,
+        // sessions / execution
+        "execute"
+            | "abort"
+            | "confirm"
+            | "interject"
+            | "resume_task"
+            | "rollback_plan"
+            | "export_session_chat"
+            | "get_history"
+            | "get_plan_history"
+            // config / security
+            | "get_config"
+            | "update_config"
+            | "reset_config"
+            | "store_api_key"
+            | "restart_elevated"
+            | "get_security_status"
+            | "get_snapshot_status"
+            | "system_info"
+            | "get_uptime"
+            // speech / voice
+            | "stop_speech"
+            | "speak_text"
+            | "voice_listener_start"
+            | "voice_listener_stop"
+            | "voice_listener_stats"
+            | "list_wake_variants"
+            | "reset_wake_calibration"
+            | "list_audio_input_devices"
+            // gestures
+            | "cursor_move"
+            | "cursor_click"
+            | "gaze_event"
+            | "gesture_workflow_bindings_get"
+            | "gesture_workflow_bindings_update"
+            | "voice_gesture_workflow_submit"
+            | "voice_gesture_workflow_list"
+            | "voice_gesture_workflow_pause"
+            | "voice_gesture_workflow_resume"
+            | "voice_gesture_workflow_cancel"
+            // cognitive / agents
+            | "cognitive_state"
+            | "agent_mesh_status"
+            | "agent_routing"
+            // plugins / marketplace
+            | "plugin_create"
+            | "plugin_install"
+            | "plugin_uninstall"
+            | "plugin_run_tool"
+            | "plugin_market_list"
+            // evolution / self-improvement
+            | "evolution_status"
+            | "evolution_runs"
+            | "evolution_candidates"
+            | "evolution_create_run"
+            | "evolution_generate_candidates"
+            | "evolution_evaluate"
+            | "evolution_request_promotion"
+            | "strategy_evolution_status"
+            | "strategy_candidates"
+            | "strategy_propose"
+            | "self_healing_status"
+            | "self_healing_config_update"
+            | "risk_gate_status"
+            | "risk_gate_config_update"
+            | "supervision_status"
+            | "supervision_config_update"
+            | "narration_status"
+            | "narration_config_update"
+            | "online_learning_status"
+            | "online_learning_reset"
+            | "proactive_learning_status"
+            | "proactive_accept"
+            | "proactive_dismiss"
+            | "temporal_memory_status"
+            | "temporal_memory_retract"
+            // policy / audit
+            | "gateway_policy_get"
+            | "gateway_policy_update"
+            | "list_gateway_events"
+            | "verify_gateway_audit"
+            | "list_permission_events"
+            | "verify_permission_audit"
+            // git
+            | "resolve_git_conflict"
+            | "apply_git_resolution"
+            // discovery helpers
+            | "list_ollama_models"
+    )
+}
+
 async fn connect_authenticated_to(url: &str, auth_token: &str) -> Result<DaemonSocket, String> {
     if auth_token.is_empty() {
         return Err("Daemon authentication token is unavailable".to_string());
@@ -160,6 +260,9 @@ pub async fn send_to_daemon(
     method: String,
     params: serde_json::Value,
 ) -> Result<(), String> {
+    if !daemon_method_allowed(&method) {
+        return Err(format!("RPC method '{method}' is not allowed"));
+    }
     let request = serde_json::json!({
         "jsonrpc": "2.0",
         "method": method,

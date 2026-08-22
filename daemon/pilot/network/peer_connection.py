@@ -69,6 +69,7 @@ class PeerConnection:
         host: str,
         port: int,
         own_capabilities: PeerCapabilities,
+        shared_secret: str = "",
         on_message: Callable[[str, str, dict[str, Any]], Any] | None = None,
         on_disconnect: Callable[[str], None] | None = None,
     ) -> None:
@@ -76,6 +77,7 @@ class PeerConnection:
         self.host = host
         self.port = port
         self._own_caps = own_capabilities
+        self._shared_secret = shared_secret or ""
         self._on_message = on_message
         self._on_disconnect = on_disconnect
 
@@ -106,7 +108,10 @@ class PeerConnection:
             logger.info("PeerConnection: connected to %s @ %s:%d", self.peer_id, self.host, self.port)
 
             # Send our capabilities on connect
-            await self._send_raw("peer_info", self._own_caps.__dict__)
+            peer_info = dict(self._own_caps.__dict__)
+            if self._shared_secret:
+                peer_info["secret"] = self._shared_secret
+            await self._send_raw("peer_info", peer_info)
 
             # Start I/O tasks
             self._task = asyncio.create_task(self._run())

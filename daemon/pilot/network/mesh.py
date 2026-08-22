@@ -31,6 +31,7 @@ Architecture
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import socket
 import uuid
@@ -193,6 +194,7 @@ class ZariffMesh:
             host=peer_info.host,
             port=peer_info.port,
             own_capabilities=own_caps,
+            shared_secret=self._config.shared_secret,
             on_message=self._on_peer_message,
             on_disconnect=self._on_connection_lost,
         )
@@ -281,6 +283,24 @@ class ZariffMesh:
                 payload = msg.get("payload", {})
 
                 if msg_type == "peer_info":
+                    if not self._secret_ok(payload):
+                        try:
+                            await websocket.send(
+                                json.dumps(
+                                    {
+                                        "type": "auth_error",
+                                        "payload": {"reason": "invalid or missing shared_secret"},
+                                    }
+                                )
+                            )
+                        except Exception:
+                            pass
+                        logger.warning(
+                            "ZariffMesh: rejected inbound peer %s (%s) — invalid or missing shared_secret",
+                            payload.get("instance_id", "?"),
+                            websocket.remote_address,
+                        )
+                        break
                     peer_id = payload.get("instance_id", str(uuid.uuid4())[:8])
                     # Register a lightweight inbound connection wrapper
                     if peer_id not in self._connections:
@@ -290,6 +310,7 @@ class ZariffMesh:
                             host=websocket.remote_address[0],
                             port=self._config.port,
                             own_capabilities=own_caps,
+                            shared_secret=self._config.shared_secret,
                             on_message=self._on_peer_message,
                             on_disconnect=self._on_connection_lost,
                         )
@@ -308,13 +329,33 @@ class ZariffMesh:
             if peer_id:
                 self._connections.pop(peer_id, None)
 
+    def _secret_ok(self, payload: dict[str, Any]) -> bool:
+        """Verify the peer_info secret against the configured shared_secret.
+
+        Fails closed: with no shared_secret configured, no peer is accepted
+        and the mesh logs why. Uses a constant-time comparison so a LAN
+        observer cannot use timing to brute-force the secret.
+        """
+        configured = self._config.shared_secret
+        if not configured:
+            logger.warning(
+                "ZariffMesh: refusing peer connection — network.shared_secret is not set. "
+                "Set the same non-empty shared_secret on every mesh peer to enable P2P."
+            )
+            return False
+        provided = payload.get("secret", "")
+        if not isinstance(provided, str) or not provided:
+            return False
+        return hmac.compare_digest(provided.encode("utf-8"), configured.encode("utf-8"))
+
     # ── Delegated task execution ──────────────────────────────────────────────
 
     async def _handle_delegated_task(self, peer_id: str, payload: dict[str, Any]) -> None:
         """Execute a batch of actions delegated by a peer and return results."""
         import json
 
-        from pilot.actions import Action, ActionPlan
+        from pilot.actions import Action, ActionPlan, ActionResult
+        from pilot.security.gateway import InvocationSource
 
         task_id = payload.get("task_id", "")
         raw_actions = payload.get("actions", [])
@@ -328,7 +369,34 @@ class ZariffMesh:
             return
 
         plan = ActionPlan(actions=actions, raw_input=raw_input, explanation="Delegated by peer")
-        results = await self._executor.execute(plan)
+
+        # Never let a peer push a plan through that would require interactive
+        # human approval locally — there is no human on the receiving side of
+        # a mesh delegation, and the interactive confirmation gate only exists
+        # on the main WebSocket path.
+        if self._executor.plan_requires_confirmation(plan):
+            logger.warning(
+                "ZariffMesh: refusing delegated task %s from %s — requires local confirmation",
+                task_id,
+                peer_id,
+            )
+            refused = [
+                ActionResult(
+                    action=action,
+                    success=False,
+                    error="Delegated action refused: requires local interactive confirmation",
+                )
+                for action in actions
+            ]
+            serialised = [r.model_dump(mode="json") for r in refused]
+            await self.send_to(peer_id, "task_result", {"task_id": task_id, "results": serialised})
+            return
+
+        results = await self._executor.execute(
+            plan,
+            invocation_source=InvocationSource.MESH,
+            user_confirmed=False,
+        )
 
         serialised = [r.model_dump(mode="json") for r in results]
         await self.send_to(peer_id, "task_result", {"task_id": task_id, "results": serialised})

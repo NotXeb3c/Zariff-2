@@ -84,6 +84,7 @@ class InvocationSource(StrEnum):
     VOICE = "voice"
     GESTURE = "gesture"
     SELF_HEALING = "self_healing"
+    MESH = "mesh"
     # Per-specialist-agent sources — see SECURITY.md's Agent Gateway section
     # for why these were added: previously only web_agent/autonomous/voice/
     # gesture/self_healing were ever explicitly declared, so ~20 other
@@ -259,6 +260,19 @@ DEFAULT_SOURCE_PROFILES: dict[str, SourceProfile] = {
             "registry_write",
             "browser_execute_js",
         ],
+        allow_root=False,
+    ),
+    # LAN mesh peers: authenticated by shared_secret, but still a remote
+    # (possibly compromised) machine. Read/observe and scoped writes only —
+    # no shell, no browser control, no system control of any kind.
+    "mesh": SourceProfile(
+        max_tier={
+            ActionFamily.SHELL.value: int(PermissionTier.READ_ONLY),
+            ActionFamily.BROWSING.value: int(PermissionTier.READ_ONLY),
+            ActionFamily.SYSTEM_CONTROL.value: int(PermissionTier.READ_ONLY),
+            ActionFamily.OTHER.value: int(PermissionTier.USER_WRITE),
+        },
+        deny_action_types=["browser_execute_js"],
         allow_root=False,
     ),
     # ── Per-specialist-agent profiles ──
@@ -522,7 +536,7 @@ class AgentGateway:
     def _profile_for(self, source: InvocationSource) -> SourceProfile:
         profiles = self._config.gateway.source_profiles
         key = source.value if source != InvocationSource.UNKNOWN else DEFAULT_UNKNOWN_SOURCE_PROFILE
-        return profiles.get(key) or DEFAULT_SOURCE_PROFILES["interactive"]
+        return profiles.get(key) or DEFAULT_SOURCE_PROFILES.get(key) or DEFAULT_SOURCE_PROFILES["interactive"]
 
     async def authorize(
         self,

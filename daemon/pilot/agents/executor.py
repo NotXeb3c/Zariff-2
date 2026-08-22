@@ -514,6 +514,14 @@ class Executor:
 
         return batches if batches else [[a] for a in actions]
 
+    def plan_requires_confirmation(self, plan: ActionPlan) -> bool:
+        """Whether this plan contains actions that need interactive approval.
+
+        Exposed for non-interactive ingress points (e.g. LAN mesh delegated
+        tasks) that must never run an unapproved high-risk plan.
+        """
+        return self._permissions.plan_requires_confirmation(plan)
+
     def _collect_batch_results(
         self,
         batch: list[Action],
