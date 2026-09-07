@@ -1,7 +1,7 @@
 import uiPackage from "../../../package.json";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
-const HELIOX_VERSION = uiPackage.version;
+const ZARIFF_VERSION = uiPackage.version;
 
 export async function invoke<T = any>(command: string, args?: any): Promise<T> {
   // First check if native Tauri IPC bridge is present
@@ -91,7 +91,7 @@ export async function invoke<T = any>(command: string, args?: any): Promise<T> {
   if (command === "get_rss_feed") {
     return [
       {
-        title: `Zariff v${HELIOX_VERSION} Current Build`,
+        title: `Zariff v${ZARIFF_VERSION} Current Build`,
         url: "https://github.com/NotXeb3c/zariff-2/releases",
         source: "Current Build",
       },

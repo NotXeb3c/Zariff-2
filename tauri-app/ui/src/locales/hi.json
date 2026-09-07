@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "हेलिओक्स OS",
+    "title": "Zariff",
     "online": "ऑनलाइन",
     "connecting": "जोड़ा जा रहा है...",
     "tab_command": "कमांड",
@@ -11,7 +11,7 @@
     "export_csv": "CSV निर्यात करें"
   },
   "chat": {
-    "empty_title": "हेलिओक्स OS",
+    "empty_title": "Zariff",
     "empty_subtitle": "आपका AI सिस्टम कंट्रोल एजेंट। टाइप करें, बोलें, या इशारा करें — मैं तैयार हूँ।",
     "suggestion_sysinfo": "सिस्टम जानकारी दिखाएं",
     "suggestion_screenshot": "स्क्रीनशॉट + OCR",

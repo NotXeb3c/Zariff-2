@@ -38,6 +38,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Zariff",
+    "homepage": "https://github.com/NotXeb3c/zariff-2",
+    "copyright": "Copyright © 2026 Zariff Contributors. MIT License.",
+    "shortDescription": "Zariff — AI System Control Agent",
+    "longDescription": "Control your computer with natural language, voice, and hand gestures. Privacy-first, open-source AI agent.",
+    "category": "Utility",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -46,6 +52,10 @@
       "icons/icon.png"
     ],
     "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "signCommand": null,
       "nsis": {
         "installMode": "both"
       }

@@ -20,6 +20,7 @@ cask "zariff" do
 
   zap trash: [
     "~/.config/zariff",
+    "~/Library/Application Support/com.zariff.app",
     "~/Library/Application Support/com.helioxos.app",
   ]
 end

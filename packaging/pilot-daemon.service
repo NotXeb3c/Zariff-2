@@ -17,7 +17,7 @@ MemoryHigh=1G
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=heliox-pilot
+SyslogIdentifier=zariff-pilot
 
 # Security
 NoNewPrivileges=true
