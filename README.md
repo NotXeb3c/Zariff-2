@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="./docs/assets/heliox-command-center-dark.png" alt="Zariff Command Center in dark mode" width="900">
+  <img src="./docs/assets/zariff-command-center-light.png" alt="Zariff Command Center" width="900">
 </p>
 
 <p align="center">
